@@ -11,7 +11,7 @@ class Sumstats:
     # Sumstats class is called in the main (sumrhe.py) module
     # it's called after the trace module, which will then call this module
     # in order to read in the phenotype sumstats.
-    def __init__(self, nblks=100, snplist = None, chisq_threshold=0, log=None):
+    def __init__(self, nblks=100, snplist = None, chisq_threshold=0, log=None, both_side=False):
         self.log = log
         self.nblks = nblks
         self.snplist = snplist
@@ -29,6 +29,9 @@ class Sumstats:
         self.nsnps_blk = [] # list of arrays, keeping track of number of SNPs in each blk
         self.npheno = 0
         self.chisq_threshold = chisq_threshold # if positive value, then remove snps with chisq above it
+        self.both_side = both_side # whether you filter SNPs on both sides. MUST have the snplist.
+        if (self.both_side) and (snplist is None):
+            self.log._log("")
         
     def _filter_snps(self, idx):
         ''' 
