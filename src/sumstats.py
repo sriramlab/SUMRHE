@@ -30,8 +30,10 @@ class Sumstats:
         self.npheno = 0
         self.chisq_threshold = chisq_threshold # if positive value, then remove snps with chisq above it
         self.both_side = both_side # whether you filter SNPs on both sides. MUST have the snplist.
+        self.matched_snps = [] # list of arrays
         if (self.both_side) and (snplist is None):
-            self.log._log("")
+            self.log._log("!!! SNP list (.bim) must be input in order to perform both-side SNP filtering! !!!")
+            return
         
     def _filter_snps(self, idx):
         ''' 
@@ -41,11 +43,14 @@ class Sumstats:
         return list of SNPs that were removed
         '''
         chisq = pow(self.zscores[idx], 2)
+        removesnps = []
         for i in range(self.nsnps[idx]):
             if (chisq[i] > self.chisq_threshold):
                 self.zscores[idx][i] = .0
                 self.nsnps[idx] -= 1
-        return
+                if (self.matched_snps[idx][i] is not None):
+                    removesnps.append(self.matched_snps[idx][i])
+        return removesnps
         
     def _read_sumstats(self, path):
         ''' Read in summary statistics for a single phenotype '''
@@ -94,6 +99,9 @@ class Sumstats:
                 nsnps_blk[i] = len(blk_zscores)
         else:
             zscore_dict = dict(zip(self.snpids[idx], self.zscores[idx]))
+            snpid_dict = dict(zip(self.snpids[idx], self.snplist))
+            matched_snps = np.array([snpid_dict.get(pid) for pid in self.snpids[idx]])
+            self.matched_snps.append(matched_snps)
             nmissing = 0
             for i in range(self.nblks):
                 blk_size = len(self.snplist)//self.nblks
