@@ -23,14 +23,15 @@ def _calc_lsum(tr, n, m):
 class Trace:
     def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None):
         self.log = log
-        self.rhepath=rhepath
-        self.sumpath=sumpath
-        self.savepath=savepath
+        self.rhepath = rhepath
+        self.sumpath = sumpath
+        self.savepath = savepath
         self.lsums = []
         self.nblks = 100
         self.nrhe = 0
         self.snplist = []
-        self.nsnps_jn = []
+        self.nsnps_jn = None # this is the nsnps for each jn. does not change
+        self.nsnps_jn_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
         if (bimpath is None) or (bimpath == ""):
             self.log._log("!!! SNP list (.bim) is generally recommended !!!")
         elif (bimpath.endswith(".bim")):
@@ -73,6 +74,7 @@ class Trace:
         self.nrhe += 1
         # if idx is 0, save # of SNPs in each jackknife subsample (this should be the same in all outputs)
         self.nsnps_jn = np.array(nsnps_jn)
+        self.nsnps = nsnps
         
     def _read_all_rhe(self, path=None):
         if self.rhepath is None:
@@ -118,10 +120,45 @@ class Trace:
     
     def _read_ldscore(self, path=None):
         ''' 
-        TODO: for filtering SNP's. Adjust trace estimates based on (truncated) LD scores; this is optional
+        For filtering SNP's. Adjust trace estimates based on (truncated) LD scores; this is optional
+        LD scores should be in the standard LD score format (CHR SNP BP L2)
         '''
-        if (path is None) or (path == ""):
-            self.log._log("!!! Invalid LD score path given !!!")
+        if (path == ""):
+            self.log._log("!!! Invalid LD score path given. Proceeding filtering without ld scores !!!")
+            self.ldscores = None
+            return
+        else:
+            ldscores = []
+            with open(path, 'r') as fd:
+                fd.next()
+                for line in fd:
+                    ldscores.append(line.split()[3])
+            # save ldscores as a dictionary
+            self.ldscores = dict(zip(self.snplist, ldscores))
+        return
+            
 
     def _calc_trace(self, nsample):
-        return self.sums * pow(nsample, 2) / pow(self.nsnps_jn, 2) + nsample
+        self.nsnps_jn_filt = self.nsnps_jn
+        return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
+
+"""
+     def _filter_snps(self, removelist):
+        '''
+        Remove the SNPs in the removelist from trace calculation. If (truncated) LD scores are available,
+        then use a scaled trace contribution from those SNPs; otherwise, assume uniform LD mapping (i.e.,
+        long-distance LD distribution is the same for all the SNPs)
+        '''
+        self.nsnps_jn_filt = self.nsnps_jn
+        # filter w/o ldscores
+        if (self.ldscores is None):
+            # filter w/o snplist (.bim): since we don't know which jn block
+            # they belong to, treat as uniform chance of belonging to any block
+            if (len(self.snplist) == 0):
+                self.sums *= (1 - len(self.removelist)/self.nsnps_jn)
+                self.nsnps_jn -= len(self.removelist)/self.nblks
+
+        else:
+
+"""
+        

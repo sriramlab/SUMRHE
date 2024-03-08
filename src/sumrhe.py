@@ -36,13 +36,10 @@ parser.add_argument("--out", default=None, type=str, \
                     help='Output file path to save the analysis log and result (.log)')
 parser.add_argument("--all-snps", action='store_true', default=False,\
                     help="Use all the SNPs in the phenotype sumamry statistics. Make sure this is safe to do so.")
-parser.add_argument("--mem-eff", action='store_true', default=False,\
-                    help='If --mem-eff flag is set, then we try to run in memory efficient mode (might be slightly slower)')
+#parser.add_argument("--mem-eff", action='store_true', default=False,\
+#                    help='If --mem-eff flag is set, then we try to run in memory efficient mode (might be slightly slower)')
 parser.add_argument("--verbose", action="store_true", default=False,\
                     help='Verbose mode: print out the normal equations')
-
-
-## TODO: implement memory-efficient flag (i.e., process one phenotype at a time)
 
 class Sumrhe:
     def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, nbin=1, \
@@ -68,20 +65,20 @@ class Sumrhe:
             self.sums = sumstats.Sumstats(nblks=self.nblks, chisq_threshold=chisq_threshold, log=self.log)
         else:
             self.sums = sumstats.Sumstats(nblks=self.nblks, snplist = self.snplist, chisq_threshold=chisq_threshold, log=self.log)
-        # check whether the path for pheno is a directory or a file
+        self.phen_dir = None
+        # check whether the path for pheno is a directory or a file. count # of phenotypes
         if os.path.exists(pheno_path):
             if os.path.isdir(pheno_path):
                 self.log._log("Reading phenotype sumstat files from a directory...")
-                self.phen_dir = sorted([f for f in os.listdir(pheno_path) if f.endswith('.sumstat')])
+                phen_files = sorted([f for f in os.listdir(pheno_path) if f.endswith('.sumstat')])
+                self.phen_dir = [pheno_path.rstrip("/")+"/"+name for name in phen_files]
                 if (len(self.phen_dir) == 0):
                     self.log._log("!!! --pheno path has no valid phenotype summary files (.sumstat) !!!")
                     sys.exit(1)
-                elif not self.mem:
-                    for f in self.phen_dir:
-                        self.sums._process(pheno_path.rstrip("/")+"/"+f)
             elif os.path.isfile(pheno_path):
                 self.log._log("Reading a single phenotype sumstat file")
-                self.sums._process(pheno_path)
+                self.phen_dir = [pheno_path]
+                #self.sums._process(pheno_path)
             else:
                 self.log._log("!!! --pheno path is invalid !!!")
                 sys.exit(1)
@@ -89,8 +86,10 @@ class Sumrhe:
             self.log._log("!!! --pheno path is invalid !!!")
             sys.exit(1)
 
-        self.npheno = self.sums.npheno
-        self.nsamp = self.sums.nsamp
+        self.npheno = len(self.phen_dir)
+        self.nsamp = []
+        self.phen_names = [os.path.basename(name)[:-8] for name in self.phen_dir]
+        #self.nsamp = self.sums.nsamp
 
         self.nbin = nbin # at the moment, SUMRHE only supports single-bin heritability
         self.nrows = nbin+1
@@ -100,21 +99,14 @@ class Sumrhe:
 
         self.out = out
         self.verbose = verbose
-        
-        # filter SNPs from both LHS and RHS
-        #if (filter_both) and (chisq_threshold > .0):
-        #    for i in 
-        #    outlier_snps = self.
-
 
     def _calc_h2(self, idx):
-        denom = self.sums.denom[idx]
+        denom = self.sums.denom
         pred_tr = self.tr._calc_trace(self.nsamp[idx])
         for i in range(self.nblks):
             numer = pred_tr[i]/self.nsamp[idx]-1.0
             self.herits[idx][i] = denom[i]/numer
         return self.herits[idx]
-
 
     def _run_jackknife(self, idx):
         ''' run snp-level block jackknife '''
@@ -123,6 +115,9 @@ class Sumrhe:
         
     def _run(self):
         for i in range(self.npheno):
+            pheno_path=self.phen_dir[i]
+            removesnps = self.sums._process(pheno_path, self.phen_names[i])
+            self.nsamp.append(self.sums.nsamp)
             self._calc_h2(i)
             self._run_jackknife(i)
         return self.hsums
@@ -174,7 +169,3 @@ if __name__ == '__main__':
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, filter_both=args.filter_both_sides)
     sums._run()
     sums._log()
-
-    
-
-
