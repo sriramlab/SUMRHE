@@ -1,0 +1,6 @@
+#ignore the data file
+data/
+
+#ignore all shell scripts
+*.sh
+
