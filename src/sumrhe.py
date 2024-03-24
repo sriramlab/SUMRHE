@@ -116,6 +116,7 @@ class Sumrhe:
         for i in range(self.npheno):
             pheno_path=self.phen_dir[i]
             removesnps = self.sums._process(pheno_path, self.phen_names[i])
+            self.tr._reset()
             if (removesnps is not None) and (self.filter_both):
                 self.tr._filter_snps(removesnps)
             self.nsamp.append(self.sums.nsamp)

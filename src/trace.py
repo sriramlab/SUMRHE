@@ -34,6 +34,7 @@ class Trace:
         self.snplist = []
         self.nsnps_jn = None # this is the nsnps for each jn. does not change
         self.nsnps_jn_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
+        self.nsnps_blk = None # nsnps in each blk
         self.ldscores = None
         if (bimpath is None) or (bimpath == ""):
             self.log._log("!!! SNP list (.bim) is generally recommended !!!")
@@ -142,8 +143,8 @@ class Trace:
             
 
     def _calc_trace(self, nsample):
-        self.nsnps_jn_filt = self.nsnps_jn
-        return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
+        #return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
+        return self.sums_filt * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
 
     @staticmethod
     def _partition(alist, npartition):
@@ -162,38 +163,56 @@ class Trace:
         return self.mapping
 
     @staticmethod
-    def _scale_excluding(alist, exclude_idx, scale):
-        return [val*scale if idx != exclude_idx else val for idx, val in enumerate(alist)]
+    def _calc_jn_subsample(alist):
+        '''
+        from a list/array return an array of leave-one-out (jackknife) subsamples
+        the last element is the sum of all elements
+        '''
+        total = sum(alist)
+        jn_sub = [total - val for val in alist]
+        jn_sub.append(total)
+        return np.array(jn_sub)
 
     def _calc_blk_ld(self):
-        total_ldscore = max(self.sums)
-        print(total_ldscore)
-        #self.ldsums_blk = [total_ldscore - ldsub for ldsub in ]
+        total_ldscore = self.sums[self.nblks]
+        self.ldsums_blk_filt = [total_ldscore - jack_ldscore for jack_ldscore in self.sums[:-1]]
+        self.nsnps_blk_filt = np.array([self.nsnps_jn[self.nblks] - nsnp for nsnp in self.nsnps_jn[:-1]])
+        return
 
+    def _reset(self):
+        '''
+        this is for running multiple phenotypes
+        '''
+        self.nsnps_jn_filt = self.nsnps_jn
+        self.sums_filt = self.sums
+        self.nsnps_jn_filt = self.nsnps_jn
 
     def _filter_snps(self, removelist):
         '''
         Remove the SNPs in the removelist from trace calculation. If (truncated) LD scores are available,
         then use a scaled trace contribution from those SNPs; otherwise, assume uniform LD mapping (i.e.,
         long-distance LD distribution is the same for all the SNPs)
+        Since different SNPs are filtered for each phenotype, modify only the "_filt" parameters
         '''
-        self.nsnps_jn_filt = self.nsnps_jn
         # filter w/o ldscores
         if (self.ldscores is None):
             # filter w/o snplist (.bim): since we don't know which jn block
             # they belong to, treat as uniform chance of belonging to any block
             if (len(self.snplist) == 0):
-                self.sums *= (1 - len(removelist)/self.nsnps_jn)
-                self.nsnps_jn -= len(removelist)*(self.nblks-1)/self.nblks
+                self.sums_filt *= (1 - len(removelist)/self.nsnps_jn_filt)
+                self.nsnps_jn_filt -= len(removelist)*(self.nblks-1)/self.nblks
             # we know where the snp belongs to, but don't have their (truncated) LD information
             # then simply scale each block 
             else:
                 self._calc_blk_ld()
-    #             self._map_idx()
-    #             removeidx = [self.mapping.get(snp, None) for snp in removelist]
-    #             for idx, cnt in np.unique(removeidx, return_counts=True)
-    #                 self.sums = (1 - cnt/self.nsnps_jn[idx])
-    #                 self.nsnps_jn[] -= cnt/
+                self._map_idx()
+                removeidx = [self.mapping.get(snp, None) for snp in removelist]
+                for idx, cnt in np.unique(removeidx, return_counts=True)
+                    self.ldsums_blk *= (1 - cnt/self.nsnps_blk[idx])
+                    #self.nsnps_blk -= 
+        ### TODO: it's possible that some of the SNPs in the trace is not included in the sumstat
+        ### in this case perhaps it's possible to remove those SNPs in the trace calculations as well
+        ### implement this
 
     def _read_ldproj(self):
         return
