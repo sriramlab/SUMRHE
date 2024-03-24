@@ -6,3 +6,6 @@ data/
 
 #ignore todos.txt
 todos.txt
+
+#ignore log outputs
+*.log
