@@ -35,6 +35,7 @@ class Sumstats:
             self.log._log("!!! SNP list (.bim) must be input in order to perform both-side SNP filtering! !!!")
             return
         self.name = None
+        self.removesnps = None
         
     def _filter_snps(self):
         ''' 
@@ -49,8 +50,10 @@ class Sumstats:
             if (chisq[i] > self.chisq_threshold):
                 self.zscores[i] = .0
                 self.nsnps -= 1
-                if (self.matched_snps[i] is not None):
-                    removesnps.append(self.matched_snps[i])
+                if (self.snplist is not None):
+                    if (self.matched_snps[i] is not None):
+                        removesnps.append(self.matched_snps[i])
+        self.log._log("Removed "+str(len(removesnps))+" SNPs with chi-sq above the threshold")
         return removesnps
         
     def _read_sumstats(self, path, name):
@@ -59,7 +62,6 @@ class Sumstats:
         Nmiss = []
         zscores = []
         self.name = name
-        ## TEMPORARY FIX: Run with the old format (nmiss, betas, betas_se) w/o snplist
         ## TEMPORARY FIX: read in the LDSC sumstat
         if (self.snplist is None):
             with open(path, 'r') as fd:
@@ -67,7 +69,6 @@ class Sumstats:
                 for line in fd:
                     val = line.split()
                     Nmiss.append(float(val[3]))
-                    #zscores.append(float(val[1])/float(val[2]))
                     zscores.append(float(val[4]))
         else:
             with open(path, 'r') as fd:
@@ -75,8 +76,8 @@ class Sumstats:
                 for line in fd:
                     val = line.split()
                     snpid.append(str(val[0]))
-                    Nmiss.append(float(val[1]))
-                    zscores.append(float(val[2]))
+                    Nmiss.append(float(val[3]))
+                    zscores.append(float(val[4]))
             self.snpids = snpid
         nsamp = max(Nmiss)
         zscores = np.array(zscores)*np.sqrt(np.array(Nmiss)/nsamp)
@@ -102,7 +103,7 @@ class Sumstats:
             zscore_dict = dict(zip(self.snpids, self.zscores))
             snpid_dict = dict(zip(self.snpids, self.snplist))
             matched_snps = np.array([snpid_dict.get(pid) for pid in self.snpids])
-            self.matched_snps.append(matched_snps)
+            self.matched_snps = matched_snps
             nmissing = 0
             for i in range(self.nblks):
                 blk_size = len(self.snplist)//self.nblks
@@ -121,18 +122,19 @@ class Sumstats:
         removesnps = None
         ## if SNP filtering is on
         if (self.chisq_threshold is not None):
-            removesnps = self._filter_snps()
-        return removesnps
+            self.log._log("Filtering SNPs with chi-sq greater than "+str(self.chisq_threshold))
+            self.removesnps = self._filter_snps()
             
         
     def _calc_denom(self):
         ''' calculate denominator from the sumstats '''
-        denom = np.zeros(self.nblks)
+        denom = np.zeros(self.nblks+1)
         total_zTz = np.dot(self.zscores, self.zscores)
         for i in range(self.nblks):
             blk_zscores = np.where(self.zscores_blk[i] == None, 0, self.zscores_blk[i])
             blk_zTz = np.dot(blk_zscores, blk_zscores)
             denom[i] = (total_zTz - blk_zTz)/(self.nsnps - self.nsnps_blk[i]) - 1.0
+        denom[self.nblks] = total_zTz/self.nsnps - 1.0
         self.denom = denom
         self.log._log("Calculated the denominator for phenotype "+self.name)
         return denom
@@ -144,3 +146,4 @@ class Sumstats:
         self._read_sumstats(path, name)
         self._match_snps()
         self._calc_denom()
+        return self.removesnps

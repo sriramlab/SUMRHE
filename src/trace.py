@@ -7,10 +7,11 @@ the RHE output metadata (.MN) should have the following:
 the RHE output tracedata (.trace) should have the following:
     jackknife subsample trace, # SNPs
     tr, M'
-the SNP sets should be the same for all the outputs. 
-it is recommended to input .bim for the list of SNPs (read in once)
+There should be (njackknife+1) rows excluding the header, where
+the last row is the trace with the entire genotype.
 
-the trace output (.sum
+The SNP sets should be the same for all the outputs. 
+it is recommended to input .bim for the list of SNPs (read in once)
 '''
 
 import numpy as np
@@ -21,17 +22,19 @@ def _calc_lsum(tr, n, m):
     return (tr - n)*pow(m,2)/pow(n,2)
 
 class Trace:
-    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None):
+    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldproj=None):
         self.log = log
         self.rhepath = rhepath
         self.sumpath = sumpath
         self.savepath = savepath
         self.lsums = []
+        self.ldsums_blk = None # sum of ldscores for each block (NOT the jn subsample)
         self.nblks = 100
         self.nrhe = 0
         self.snplist = []
         self.nsnps_jn = None # this is the nsnps for each jn. does not change
         self.nsnps_jn_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
+        self.ldscores = None
         if (bimpath is None) or (bimpath == ""):
             self.log._log("!!! SNP list (.bim) is generally recommended !!!")
         elif (bimpath.endswith(".bim")):
@@ -66,8 +69,8 @@ class Trace:
                 nsnps_jn.append(ns)
         
         # calculate sum of block LD for each jackknife subsample
-        lsum = np.zeros(nblks)
-        for i in range(nblks):
+        lsum = np.zeros(nblks+1)
+        for i in range(nblks+1):
             lsum[i] =  _calc_lsum(trace[i], nsamp, nsnps_jn[i])
         
         self.lsums.append(lsum)
@@ -93,7 +96,7 @@ class Trace:
         ''' Save trace summaries as a file'''
         with open(self.savepath+".tr", 'w') as fd:
             fd.write("LDsum,LDsum_std,NSNP\n")
-            for i in range(self.nblks):
+            for i in range(self.nblks+1):
                 fd.write(format(self.sums[i],'.3f')+","+format(self.stds[i], '.3f')+","+format(self.nsnps_jn[i], '.0f')+"\n")
         self.log._log("Saved trace summary into "+self.savepath+".tr")
     
@@ -113,9 +116,10 @@ class Trace:
         self.sums = np.array(sums)
         self.stds = np.array(stds)
         self.nsnps_jn = np.array(nsnps_jn)
-        self.nblks = len(self.sums)
+        self.nblks = len(self.sums)-1
         self.log._log("Reading in trace summaries from "+self.sumpath)
-        self.log._log("-- mean lsum: "+format(self.sums.mean(), '.3f')+"\n-- N jackknife blocks: "+str(self.nblks))
+        self.log._log("-- avg. jackknife LDscore sum:\t"+format(self.sums[:-1].mean(), '.3f')+"\n-- number of jackknife blocks:\t"+str(self.nblks)\
+            +"\n-- genome-wide LDscore sum:\t"+format(self.sums[-1], '.3f'))
         return self.sums, self.stds
     
     def _read_ldscore(self, path=None):
@@ -125,7 +129,6 @@ class Trace:
         '''
         if (path == ""):
             self.log._log("!!! Invalid LD score path given. Proceeding filtering without ld scores !!!")
-            self.ldscores = None
             return
         else:
             ldscores = []
@@ -142,8 +145,33 @@ class Trace:
         self.nsnps_jn_filt = self.nsnps_jn
         return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
 
-"""
-     def _filter_snps(self, removelist):
+    @staticmethod
+    def _partition(alist, npartition):
+        step_size = len(alist)//npartition
+        return [alist[i*step_size:(i+1)*step_size] if i+1 < npartition else alist[i*step_size: ] for i in range(npartition)]
+        
+    def _map_idx(self):
+        '''
+        create a mapping of SNP id -> idx
+        '''
+        self.mapping = {}
+        partition = self._partition(self.snplist, self.nblks)
+        for idx, part in enumerate(partition):
+            for snp in part:
+                self.mapping[snp] = idx
+        return self.mapping
+
+    @staticmethod
+    def _scale_excluding(alist, exclude_idx, scale):
+        return [val*scale if idx != exclude_idx else val for idx, val in enumerate(alist)]
+
+    def _calc_blk_ld(self):
+        total_ldscore = max(self.sums)
+        print(total_ldscore)
+        #self.ldsums_blk = [total_ldscore - ldsub for ldsub in ]
+
+
+    def _filter_snps(self, removelist):
         '''
         Remove the SNPs in the removelist from trace calculation. If (truncated) LD scores are available,
         then use a scaled trace contribution from those SNPs; otherwise, assume uniform LD mapping (i.e.,
@@ -155,10 +183,17 @@ class Trace:
             # filter w/o snplist (.bim): since we don't know which jn block
             # they belong to, treat as uniform chance of belonging to any block
             if (len(self.snplist) == 0):
-                self.sums *= (1 - len(self.removelist)/self.nsnps_jn)
-                self.nsnps_jn -= len(self.removelist)/self.nblks
+                self.sums *= (1 - len(removelist)/self.nsnps_jn)
+                self.nsnps_jn -= len(removelist)*(self.nblks-1)/self.nblks
+            # we know where the snp belongs to, but don't have their (truncated) LD information
+            # then simply scale each block 
+            else:
+                self._calc_blk_ld()
+    #             self._map_idx()
+    #             removeidx = [self.mapping.get(snp, None) for snp in removelist]
+    #             for idx, cnt in np.unique(removeidx, return_counts=True)
+    #                 self.sums = (1 - cnt/self.nsnps_jn[idx])
+    #                 self.nsnps_jn[] -= cnt/
 
-        else:
-
-"""
-        
+    def _read_ldproj(self):
+        return

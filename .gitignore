@@ -4,3 +4,5 @@ data/
 #ignore all shell scripts
 *.sh
 
+#ignore todos.txt
+todos.txt

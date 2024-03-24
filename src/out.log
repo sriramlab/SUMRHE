@@ -1,0 +1,17 @@
+>>> SUM-RHE arguments
+python3 sumrhe.py 		--pheno /u/home/b/bronsonj/project-sriram/sumrhe/data/sumstats/sums_0.4_test_ldsc/sim_10k_0.sumstat
+		--bim /u/home/b/bronsonj/project-sriram/sumrhe/10k_split.bim
+		--trace /u/home/b/bronsonj/project-sriram/sumrhe/data/sumtrace/trace_10k_ref.tr
+		--out ./out
+Analysis started at: 2024-03-23 17:09:45 PDT
+Reading in trace summaries from /u/home/b/bronsonj/project-sriram/sumrhe/data/sumtrace/trace_10k_ref.tr
+-- avg. jackknife LDscore sum:	1650605.183
+-- number of jackknife blocks:	1000
+-- genome-wide LDscore sum:	1652377.421
+Reading a single phenotype sumstat file
+Matched 454207 SNPs in phenotype sim_10k_0, out of 454207 SNPs (0 missing)
+Calculated the denominator for phenotype sim_10k_0
+^^^ Phenotype 0 Estimated total heritability (h^2): 0.47093 SE: 0.05385
+Analysis ended at: 2024-03-23 17:09:47 PDT
+run time: 1.737 s
+Saved log in ./out.log
