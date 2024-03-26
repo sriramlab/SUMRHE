@@ -22,19 +22,20 @@ def _calc_lsum(tr, n, m):
     return (tr - n)*pow(m,2)/pow(n,2)
 
 class Trace:
-    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldproj=None):
+    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldproj=None, nblks=100):
         self.log = log
         self.rhepath = rhepath
         self.sumpath = sumpath
         self.savepath = savepath
+        self.ldprojpath = ldproj
         self.lsums = []
-        self.ldsums_blk = None # sum of ldscores for each block (NOT the jn subsample)
-        self.nblks = 100
+        self.sums = None
+        self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
         self.nrhe = 0
         self.snplist = []
+        self.nsnps = 0
         self.nsnps_jn = None # this is the nsnps for each jn. does not change
         self.nsnps_jn_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
-        self.nsnps_blk = None # nsnps in each blk
         self.ldscores = None
         if (bimpath is None) or (bimpath == ""):
             self.log._log("!!! SNP list (.bim) is generally recommended !!!")
@@ -116,8 +117,9 @@ class Trace:
                 
         self.sums = np.array(sums)
         self.stds = np.array(stds)
-        self.nsnps_jn = np.array(nsnps_jn)
         self.nblks = len(self.sums)-1
+        self.nsnps = nsnps_jn[self.nblks]
+        self.nsnps_jn = np.array(nsnps_jn)
         self.log._log("Reading in trace summaries from "+self.sumpath)
         self.log._log("-- avg. jackknife LDscore sum:\t"+format(self.sums[:-1].mean(), '.3f')+"\n-- number of jackknife blocks:\t"+str(self.nblks)\
             +"\n-- genome-wide LDscore sum:\t"+format(self.sums[-1], '.3f'))
@@ -143,8 +145,11 @@ class Trace:
             
 
     def _calc_trace(self, nsample):
-        #return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
-        return self.sums_filt * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
+        if (self.ld_proj is not None):
+            return self._calc_trace_from_ldproj(nsample)
+        else:
+            #return self.sums * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
+            return self.sums_filt * pow(nsample, 2) / pow(self.nsnps_jn_filt, 2) + nsample
 
     @staticmethod
     def _partition(alist, npartition):
@@ -177,11 +182,14 @@ class Trace:
         total_ldscore = self.sums[self.nblks]
         self.ldsums_blk_filt = [total_ldscore - jack_ldscore for jack_ldscore in self.sums[:-1]]
         self.nsnps_blk_filt = np.array([self.nsnps_jn[self.nblks] - nsnp for nsnp in self.nsnps_jn[:-1]])
+        print("total ld", sum(self.ldsums_blk_filt))
+        print("???", total_ldscore)
+        print("diff: ", sum(self.ldsums_blk_filt) - total_ldscore)
         return
 
     def _reset(self):
         '''
-        this is for running multiple phenotypes
+        this is for running multiple phenotypes; reset the *_filt params
         '''
         self.nsnps_jn_filt = self.nsnps_jn
         self.sums_filt = self.sums
@@ -207,12 +215,51 @@ class Trace:
                 self._calc_blk_ld()
                 self._map_idx()
                 removeidx = [self.mapping.get(snp, None) for snp in removelist]
-                for idx, cnt in np.unique(removeidx, return_counts=True)
-                    self.ldsums_blk *= (1 - cnt/self.nsnps_blk[idx])
-                    #self.nsnps_blk -= 
+                indices, counts = np.unique(removeidx, return_counts=True)
+                # for idx, cnt in zip(indices, counts):
+                #     self.ldsums_blk_filt[idx] *= (1 - cnt/self.nsnps_blk_filt[idx])
+                #     self.nsnps_blk_filt[idx] -= cnt
+                # print(sum(self.ldsums_blk_filt))
+                # print(sum(self.nsnps_blk_filt))
+                #updated_sums = self._calc_jn_subsample(self.ldsums_blk_filt)
+                #print(updated_sums[:-1].min(), updated_sums[:-1].mean(), updated_sums.max(), updated_sums[-1])
         ### TODO: it's possible that some of the SNPs in the trace is not included in the sumstat
         ### in this case perhaps it's possible to remove those SNPs in the trace calculations as well
         ### implement this
 
+    @staticmethod
+    def _calc_trace_from_ld(mat, b, n, m):
+        return np.square(mat).sum()/(b*pow(m,2))
+
+    def _calc_trace_from_ldproj(self, N):
+        print(self.nblks)
+        trace = np.zeros(self.nblks+1)
+        for j in range(self.nblks):
+            mask = np.ones((self.nsnps, ), dtype=bool)
+            blk_size = self.nsnps//self.nblks
+            idx_start = blk_size*j
+            idx_end = 0
+            if (j==self.nblks-1):
+                idx_end = self.nsnps
+            else:
+                idx_end = blk_size*(j+1)
+            mask[idx_start:idx_end] = False
+            trace[j] = self._calc_trace_from_ld(self.ld_proj[mask], self.B, N, self.nsnps_jn_filt[j])
+        trace[self.nblks] = self._calc_trace_from_ld(self.ld_proj, self.B, N, self.nsnps)
+        return trace
+
     def _read_ldproj(self):
+        '''
+        Read the LD projection matrix (X^T Xz) instead of trace summaries. LD projection matrices
+        are in np binary format (.npy)
+        '''
+        self.ld_proj = np.load(self.ldprojpath, allow_pickle=False)
+        self.nsnps = self.ld_proj.shape[0]
+        self.B = self.ld_proj.shape[1]
+        self.log._log("Loaded the LD projection matrix with "+str(self.nsnps)+" SNPs and "+\
+                        str(self.B)+" random vectors")
+        blk_size = self.nsnps//self.nblks
+        print("blk_size", blk_size)
+        self.nsnps_jn = [self.nsnps - blk_size if i < self.nblks-1 else i*blk_size for i in range(self.nblks)]
+        self.nsnps_jn.append(self.nsnps)
         return

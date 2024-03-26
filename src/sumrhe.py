@@ -40,22 +40,26 @@ parser.add_argument("--verbose", action="store_true", default=False,\
                     help='Verbose mode: print out the normal equations')
 parser.add_argument("--ldproj", default=None, type=str, \
                     help='File path for LD projection matrix in binary (.brz)')
+parser.add_argument("--njack", default=100, type=int, \
+                    help='Number of jackknife blocks (only if using ld projection matrix)')
 
 class Sumrhe:
     def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, nbin=1, \
-            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldproj=None):
+            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldproj=None, njack=None):
         self.mem = mem
         self.log = log
         self.timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         self.start_time = time.time()
         self.log._log("Analysis started at: "+str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time)))+" "+str(self.timezone))
-        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldproj=ldproj, log=self.log)
+        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldproj=ldproj, log=self.log, nblks=njack)
         if (rhe_path is not None):
             self.tr._read_all_rhe()
             if (save_path is not None):
                 self.tr._save_trace()
         elif (sum_path is not None):
             self.tr._read_trace()
+        elif (ldproj is not None):
+            self.tr._read_ldproj()
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
         if (allsnp):
@@ -75,7 +79,6 @@ class Sumrhe:
             elif os.path.isfile(pheno_path):
                 self.log._log("Reading a single phenotype sumstat file")
                 self.phen_dir = [pheno_path]
-                #self.sums._process(pheno_path)
             else:
                 self.log._log("!!! --pheno path is invalid !!!")
                 sys.exit(1)
@@ -86,7 +89,6 @@ class Sumrhe:
         self.npheno = len(self.phen_dir)
         self.nsamp = []
         self.phen_names = [os.path.basename(name)[:-8] for name in self.phen_dir]
-        #self.nsamp = self.sums.nsamp
 
         self.nbin = nbin # at the moment, SUMRHE only supports single-bin heritability
         self.nrows = nbin+1
@@ -169,6 +171,6 @@ if __name__ == '__main__':
 
     sums = Sumrhe(bim_path=args.bim, rhe_path=args.rhe, sum_path=args.trace, save_path=args.save_trace, pheno_path=args.pheno,\
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, \
-                filter_both=args.filter_both_sides, ldproj=args.ldproj)
+                filter_both=args.filter_both_sides, ldproj=args.ldproj, njack=args.njack)
     sums._run()
     sums._log()
