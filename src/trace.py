@@ -145,6 +145,7 @@ class Trace:
             
 
     def _calc_trace(self, nsample):
+        self.log._log("Calculating trace...")
         if (self.ld_proj is not None):
             return self._calc_trace_from_ldproj(nsample)
         else:
@@ -229,10 +230,9 @@ class Trace:
 
     @staticmethod
     def _calc_trace_from_ld(mat, b, n, m):
-        return np.square(mat).sum()/(b*pow(m,2))
+        return np.square(mat).sum()*pow(n, 2)/(b*pow(m,2))
 
     def _calc_trace_from_ldproj(self, N):
-        print(self.nblks)
         trace = np.zeros(self.nblks+1)
         for j in range(self.nblks):
             mask = np.ones((self.nsnps, ), dtype=bool)

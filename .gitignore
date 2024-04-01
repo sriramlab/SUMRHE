@@ -5,7 +5,7 @@ data/
 *.sh
 
 #ignore todos.txt
-todos.txt
+*/todos.txt
 
 #ignore log outputs
 *.log
