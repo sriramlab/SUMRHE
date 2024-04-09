@@ -179,14 +179,11 @@ class Trace:
         jn_sub.append(total)
         return np.array(jn_sub)
 
-    def _calc_blk_ld(self):
-        total_ldscore = self.sums[self.nblks]
-        self.ldsums_blk_filt = [total_ldscore - jack_ldscore for jack_ldscore in self.sums[:-1]]
-        self.nsnps_blk_filt = np.array([self.nsnps_jn[self.nblks] - nsnp for nsnp in self.nsnps_jn[:-1]])
-        print("total ld", sum(self.ldsums_blk_filt))
-        print("???", total_ldscore)
-        print("diff: ", sum(self.ldsums_blk_filt) - total_ldscore)
-        return
+    # def _calc_blk_ld(self):
+    #     total_ldscore = self.sums[self.nblks]
+    #     self.ldsums_blk_filt = [total_ldscore - jack_ldscore for jack_ldscore in self.sums[:-1]]
+    #     self.nsnps_blk_filt = np.array([self.nsnps_jn[self.nblks] - nsnp for nsnp in self.nsnps_jn[:-1]])
+    #     return
 
     def _reset(self):
         '''
@@ -230,7 +227,8 @@ class Trace:
 
     @staticmethod
     def _calc_trace_from_ld(mat, b, n, m):
-        return np.square(mat).sum()*pow(n, 2)/(b*pow(m,2))
+        #return np.square(mat).sum()*pow(n, 2)/(b*pow(m,2))
+        return mat.sum()*pow(n/m, 2)/b + n
 
     def _calc_trace_from_ldproj(self, N):
         trace = np.zeros(self.nblks+1)
@@ -259,7 +257,7 @@ class Trace:
         self.log._log("Loaded the LD projection matrix with "+str(self.nsnps)+" SNPs and "+\
                         str(self.B)+" random vectors")
         blk_size = self.nsnps//self.nblks
-        print("blk_size", blk_size)
+        self.log._log("blk_size: "+str(blk_size))
         self.nsnps_jn = [self.nsnps - blk_size if i < self.nblks-1 else i*blk_size for i in range(self.nblks)]
         self.nsnps_jn.append(self.nsnps)
         return

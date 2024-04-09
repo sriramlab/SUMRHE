@@ -38,6 +38,8 @@ parser.add_argument("--all-snps", action='store_true', default=False,\
                     help="Use all the SNPs in the phenotype sumamry statistics. Make sure this is safe to do so.")
 parser.add_argument("--verbose", action="store_true", default=False,\
                     help='Verbose mode: print out the normal equations')
+parser.add_argument("--suppress", action="store_true", default=False,\
+                    help='Suppress mode: do not print out the outputs to stdout (log file only)')
 parser.add_argument("--ldproj", default=None, type=str, \
                     help='File path for LD projection matrix in binary (.brz)')
 parser.add_argument("--njack", default=100, type=int, \
@@ -142,7 +144,8 @@ class Sumrhe:
         return
 
 if __name__ == '__main__':
-    log = Logger()
+    args = parser.parse_args()
+    log = Logger(suppress = args.suppress)
     log._log(">>> SUM-RHE arguments")
     log._log("python3 sumrhe.py", end=" ")
     arg = sys.argv[1:]
@@ -157,7 +160,6 @@ if __name__ == '__main__':
         else:
             log._log(arg[i] if i==0 else '\t\t'+arg[i])
         i += 1
-    args = parser.parse_args()
     if (args.trace is None) and (args.rhe is None) and (args.ldproj is None):
         log._log("!!! Either trace sumamry, RHE trace output or LD projection matrix must be provided !!!")
         sys.exit(1)
