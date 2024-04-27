@@ -10,7 +10,7 @@ Installing and running SUM-RHE is very simple. Clone the codebase and simply run
 git clone https://github.com/bronsonj98/SUMRHE.git
 ```
 
-An example run command is as follows (run.sh in the ```example``` directory:
+An example run command is as follows (run.sh in the ```example``` directory):
 ```
 python3 sumrhe.py --pheno ./test --all-snps --trace ${demo}/trace_sum_281k_25.tr --max-chisq 15
 ```
@@ -29,3 +29,11 @@ python3 sumrhe.py --pheno ./test --all-snps --trace ${demo}/trace_sum_281k_25.tr
 --ldscore : File path for LD scores of the reference SNPs, used for filtering non-polygenic SNPs.
 --all-snps : Use all the SNPs in the phenotype sumamry statistics. Make sure this is safe to do so.
 --verbose : Verbose mode: print out the normal equations
+--suppress : Suppress mode: do not print out the outputs to stdout (log file only)
+--ld_proj : File path for LD projection matrix in binary (.brz)
+--njack : Number of jackknife blocks (only if using ld projection matrix)
+```
+
+## References
+You may refer to the following bioRxiv preprint for more details on how SUM-RHE works & benchmark results:
+https://www.biorxiv.org/content/10.1101/2024.03.09.584258v1.full
