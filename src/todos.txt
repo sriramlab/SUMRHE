@@ -1,3 +1,0 @@
-1. Implement SNP filtering on both sides
-2. Fix the point estimate (to use all the SNPs). summary statistics needs adjustment too.
-3. 

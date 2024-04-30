@@ -28,6 +28,7 @@ class Trace:
         self.sumpath = sumpath
         self.savepath = savepath
         self.ldprojpath = ldproj
+        self.ld_proj = None
         self.lsums = []
         self.sums = None
         self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
