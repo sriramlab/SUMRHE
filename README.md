@@ -17,6 +17,11 @@ python3 ../src/sumrhe.py --pheno ./sim_50k_h_0.25_p_0.01.sumstat \
                   --trace ./ref241k_sumtrace.tr  
 ```
 
+If you'd like to create your own trace summaries, please refer to the PyRHE program from our lab: https://github.com/sriramlab/PyRHE.
+
+You would need your own individual-level genotype for this (running with ```-tr``` option will print the trace summaries).
+
+
 ## Parameters
 
 ```
