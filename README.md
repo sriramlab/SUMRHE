@@ -12,7 +12,9 @@ git clone https://github.com/bronsonj98/SUMRHE.git
 
 An example run command is as follows (run.sh in the ```example``` directory):
 ```
-python3 sumrhe.py --pheno ./test --all-snps --trace ${demo}/trace_sum_281k_25.tr --max-chisq 15
+python3 ../src/sumrhe.py --pheno ./sim_50k_h_0.25_p_0.01.sumstat \
+                  --bim ./10k_split.bim \
+                  --trace ./ref241k_sumtrace.tr  
 ```
 
 ## Parameters
