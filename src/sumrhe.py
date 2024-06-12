@@ -44,30 +44,26 @@ parser.add_argument("--ldproj", default=None, type=str, \
                     help='File path for LD projection matrix in binary (.brz)')
 parser.add_argument("--njack", default=100, type=int, \
                     help='Number of jackknife blocks (only if using ld projection matrix)')
+parser.add_argument("--annot", default=None, type=str, \
+                    help='Path of the annotation file (only if using partitioned heritability)')                    
 
 class Sumrhe:
-    def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, nbin=1, \
-            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldproj=None, njack=None):
+    def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, \
+            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldproj=None, njack=None, annot=None):
         self.mem = mem
         self.log = log
         self.timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         self.start_time = time.time()
         self.log._log("Analysis started at: "+str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time)))+" "+str(self.timezone))
-        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldproj=ldproj, log=self.log, nblks=njack)
-        if (rhe_path is not None):
-            self.tr._read_all_rhe()
-            if (save_path is not None):
-                self.tr._save_trace()
-        elif (sum_path is not None):
-            self.tr._read_trace()
-        elif (ldproj is not None):
-            self.tr._read_ldproj()
+        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldproj=ldproj, log=self.log, nblks=njack, annot=annot)
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
+        self.annot = self.tr.annot
+        self.nbins = self.tr.nbins
         if (allsnp):
-            self.sums = sumstats.Sumstats(nblks=self.nblks, chisq_threshold=chisq_threshold, log=self.log)
+            self.sums = sumstats.Sumstats(nblks=self.nblks, chisq_threshold=chisq_threshold, log=self.log, annot=self.annot, nbins=self.nbins)
         else:
-            self.sums = sumstats.Sumstats(nblks=self.nblks, snplist = self.snplist, chisq_threshold=chisq_threshold, log=self.log)
+            self.sums = sumstats.Sumstats(nblks=self.nblks, snplist = self.snplist, chisq_threshold=chisq_threshold, log=self.log, annot=self.annot, nbins=self.nbins)
         self.phen_dir = None
         # check whether the path for pheno is a directory or a file. count # of phenotypes
         if os.path.exists(pheno_path):
@@ -92,29 +88,44 @@ class Sumrhe:
         self.nsamp = []
         self.phen_names = [os.path.basename(name)[:-8] for name in self.phen_dir]
 
-        self.nbin = nbin # at the moment, SUMRHE only supports single-bin heritability
-        self.nrows = nbin+1
-
-        self.herits = np.zeros((self.npheno, self.nblks+1))
-        self.hsums = np.zeros((self.npheno, self.nrows))
+        self.herits = np.zeros((self.npheno, self.nblks+1, self.nbins+2)) # jackknife subsampled partitioned h2
+        self.hsums = np.zeros((self.npheno, self.nbins+2, 2)) # partitioned h2 + total h2
 
         self.out = out
         self.filter_both = filter_both
         self.verbose = verbose
 
+    def solve_linear_equation(self, X, y, method='lstsq'):
+        '''
+        Solve system of linear equations (either least square or QR)
+        '''
+        if (method == 'lstsq'):
+            return np.linalg.lstsq(X, y, rcond=None)[0]
+        else:
+            Q, R = scipy.linalg.qr(X)
+            return scipy.linalg.solve_triangular(R, np.dot(Q.T, y))
+
     def _calc_h2(self, idx):
-        denom = self.sums.denom
+        '''
+        in order to incorporate multiple-component case, solve a system of linear equations instead
+        '''
+        rhs = self.sums.rhs
         pred_tr = self.tr._calc_trace(self.nsamp[idx])
         for i in range(self.nblks+1):
-            numer = pred_tr[i]/self.nsamp[idx]-1.0
-            self.herits[idx][i] = denom[i]/numer
+            h2_est = self.solve_linear_equation(pred_tr[i], rhs[i])
+            self.herits[idx][i] = np.append(h2_est, h2_est[:-1].sum()) # append total h2 as the last val
+        if (self.verbose):
+            sigmas = ["sigma^2_g" + str(i) for i in range(self.nbins)] + ["\sigma^2_e"]
+            sigmas_str = "["+", ".join(sigmas)+"]\n"
+            self.log._log("Normal equation:\n"+np.array2string(pred_tr[self.nblks], precision=2, separator=', ')+"\n\t\tx\n"\
+                +sigmas_str+"\t\t=\n"+np.array2string(rhs[self.nblks], precision=2, separator=', '))
+            self.log._log("Solution:"+np.array2string(self.herits[idx][self.nblks], precision=3, separator=', '))
         return self.herits[idx]
 
     def _run_jackknife(self, idx):
         ''' run snp-level block jackknife '''
-        #self.hsums[idx][0] = self.herits[idx].mean()
-        self.hsums[idx][0] = self.herits[idx, self.nblks]
-        self.hsums[idx][1] = np.sqrt(np.sum(np.square(self.herits[idx][:-1] - self.hsums[idx][0]))*(self.nblks-1)/self.nblks)
+        self.hsums[idx, :, 0] = self.herits[idx, self.nblks] # h2 from all snps
+        self.hsums[idx, :, 1] = np.sqrt(np.sum(np.square(self.herits[idx, :-1, :] - self.hsums[idx, :, 0]))*(self.nblks-1)/self.nblks) # jackknife SE
         
     def _run(self):
         for i in range(self.npheno):
@@ -131,8 +142,8 @@ class Sumrhe:
     
     def _log(self):
         for i in range(self.npheno):
-            h2 = self.hsums[i][0]
-            se = self.hsums[i][1]
+            h2 = self.hsums[i, -1][0]
+            se = self.hsums[i, -1][1]
             self.log._log("^^^ Phenotype "+str(i)+" Estimated total heritability (h^2): "+format(h2, '.5f')+" SE: "+format(se, '.5f'))
         
         self.end_time = time.time()
@@ -153,9 +164,9 @@ if __name__ == '__main__':
     while i < len(arg):
         if arg[i].startswith('-'):
             if (i == 0):
-                log._log("\t\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
+                log._log("\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
             else:
-                log._log("\t\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
+                log._log("\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
             i += 1
         else:
             log._log(arg[i] if i==0 else '\t\t'+arg[i])
@@ -173,6 +184,6 @@ if __name__ == '__main__':
 
     sums = Sumrhe(bim_path=args.bim, rhe_path=args.rhe, sum_path=args.trace, save_path=args.save_trace, pheno_path=args.pheno,\
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, \
-                filter_both=args.filter_both_sides, ldproj=args.ldproj, njack=args.njack)
+                filter_both=args.filter_both_sides, ldproj=args.ldproj, njack=args.njack, annot=args.annot)
     sums._run()
     sums._log()
