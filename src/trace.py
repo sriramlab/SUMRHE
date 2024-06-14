@@ -15,13 +15,10 @@ it is recommended to input .bim for the list of SNPs (read in once)
 '''
 
 import numpy as np
-from os import listdir
+from os import listdir, path
 from logger import Logger
 import utils
 import sys
-
-def _calc_lsum(tr, n, m):
-    return (tr - n)*pow(m,2)/pow(n,2)
 
 class Trace:
     def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldproj=None, nblks=100, annot=None):
@@ -76,7 +73,7 @@ class Trace:
             self.log._log("!!! number of components in annotation does not match the input trace summary !!!")
             sys.exit(1)
         self.blk_size = self.nsnps//self.nblks
-        self.log._log("blk_size: "+str(self.blk_size))
+        self.log._log("Number of jackknife blocks: "+str(self.nblks)+", blk_size: "+str(self.blk_size))
         self.nsnps_bin = self.annot.sum(axis=0)
         self.nsnps_blk = np.full((self.nblks+1, self.nbins), self.nsnps_bin)
         for i in range(self.nblks):
@@ -85,51 +82,52 @@ class Trace:
             if (i==self.nblks-1):
                 idx_end = self.nsnps
             self.nsnps_blk[i] -= self.annot[idx_start: idx_end].sum(axis=0)
+        np.savetxt("nsnps_blk.txt", self.nsnps_blk.reshape(-1, 1), fmt='%d')
        
 
     def _read_one_rhe(self, filename, idx):
-        # TODO: Implement multiple-component processing of RHE
-        trace = []
-        nsnps_blk = []
-        nsamp = 0
-        nsnps = 0
-        nblks = 0 # at the moment, the number of blocks in all the trace stats must be the same
         # read in metadata
+        nsamp, nsnps, nblks, nbins = 0, 0, 0, 0 # at the moment, the number of blocks in all the trace stats must be the same
         with open(filename+".MN", 'r') as fd:
-            next(fd)           
-            nsamp, nsnps, nblks = map(int, fd.readline().split(','))
+            next(fd)
+            nsamp, nsnps, nblks, nbins = map(int, fd.readline().split(','))
         if not idx:
             self.nblks = nblks
+            self.nbins = nbins
         elif (nblks != self.nblks):
             self.log._log("!!! RHE output "+filename+" has incorrect number of jackknife blocks !!!")
             return
+        elif (nbins != self.nbins):
+            self.log._log("!!! RHE output "+filename+" has incorrect number of annotation bins !!!")
+            return
+        trace = np.zeros((self.nblks+1, self.nbins, self.nbins))
+        nsnps_blk = np.zeros((self.nblks+1, self.nbins))
         
         # read in trace values
-        with open(filename+".trace", 'r') as fd:
-            next(fd)
-            for line in fd:
-                tr, ns = map(float, line.strip().split(','))
-                trace.append(tr)
-                nsnps_blk.append(ns)
+        for cnt, vals in enumerate(utils._read_multiple_lines(filename+".trace", self.nbins)):
+            trace[cnt] = vals[:, :-1]
+            nsnps_blk[cnt] = vals[:, -1].transpose()
         
         # calculate sum of block LD for each jackknife subsample
-        lsum = np.zeros(nblks+1)
-        for i in range(nblks+1):
-            lsum[i] =  _calc_lsum(trace[i], nsamp, nsnps_jn[i])
-        
+        lsum = np.zeros((nblks+1, self.nbins, self.nbins))
+        for k in range(self.nbins):
+            for l in range(self.nbins):
+                for j in range(self.nblks+1):
+                    lsum[j, k, l] =  utils._calc_lsum(trace[j, k, l], nsamp, nsnps_blk[j, k], nsnps_blk[j, l])
         self.lsums.append(lsum)
         self.nrhe += 1
         # if idx is 0, save # of SNPs in each jackknife subsample (this should be the same in all outputs)
-        self.nsnps_blk = np.array(nsnps_blk)
-        self.nsnps = nsnps
+        if not idx:
+            self.nsnps_blk = nsnps_blk
+            self.nsnps = nsnps
         
-    def _read_all_rhe(self, path=None):
-        if self.rhepath is None:
-            self.rhepath = path
-        trace_files = sorted([f.rstrip('.trace') for f in listdir(self.rhepath) if f.endswith('.trace')])
-        prefix = self.rhepath.rstrip('/') + "/"
+    def _read_all_rhe(self):
+        trace_files = [self.rhepath]
+        if path.isdir(self.rhepath):
+            prefix = self.rhepath.rstrip('/') + "/"
+            trace_files = sorted([prefix + f.rstrip('.trace') for f in listdir(self.rhepath) if f.endswith('.trace')])
         for i, f in enumerate(trace_files):
-            self._read_one_rhe(prefix+f, i)
+            self._read_one_rhe(f, i)
         self.lsums = np.array(self.lsums)
         self.log._log("Finished reading "+str(len(trace_files))+" RHE trace outputs.")
         self.sums = self.lsums.mean(axis=0)
@@ -192,35 +190,15 @@ class Trace:
         if (self.ld_proj is not None):
             return self._calc_trace_from_ldproj(nsample)
         else:
-            return self.sums_filt * pow(nsample, 2) / pow(self.nsnps_blk_filt, 2) + nsample
-
-
-    # @staticmethod
-    # def _partition(alist, npartition):
-    #     step_size = len(alist)//npartition
-    #     return [alist[i*step_size:(i+1)*step_size] if i+1 < npartition else alist[i*step_size: ] for i in range(npartition)]
-        
-    def _map_idx(self):
-        '''
-        create a mapping of SNP id -> idx
-        '''
-        self.mapping = {}
-        partition = utils._partition(self.snplist, self.nblks)
-        for idx, part in enumerate(partition):
-            for snp in part:
-                self.mapping[snp] = idx
-        return self.mapping
-
-    @staticmethod
-    def _calc_jn_subsample(alist):
-        '''
-        from a list/array return an array of leave-one-out (jackknife) subsamples
-        the last element is the sum of all elements
-        '''
-        total = sum(alist)
-        jn_sub = [total - val for val in alist]
-        jn_sub.append(total)
-        return np.array(jn_sub)
+            return self._calc_trace_from_sums(nsample)
+    
+    def _calc_trace_from_sums(self, N):
+        trace = np.full((self.nblks+1, self.nbins+1, self.nbins+1), N)
+        for k in range(self.nbins):
+            for l in range(self.nbins):
+                for j in range(self.nblks+1):
+                    trace[j, k, l] = utils._calc_trace_from_ld(self.sums[j, k, l], N, self.nsnps_blk[j, k], self.nsnps_blk[j, l])
+        return trace
 
     def _reset(self):
         '''
@@ -266,9 +244,6 @@ class Trace:
     # def _calc_trace_from_ld(mat, n, m1, m2):
     #     return mat.sum()*pow(n/m, 2) + n
 
-    @staticmethod
-    def _calc_trace_from_ld(ldsum, n, m1, m2):
-        return ldsum*pow(n, 2)/(m1*m2) + n
 
     def _calc_trace_from_ldproj(self, N):
         trace = np.full((self.nblks+1, self.nbins+1, self.nbins+1), N)
@@ -283,16 +258,17 @@ class Trace:
                     ld_sum_jn = ld_sum - ld_proj_jn[annot_jn[:, k]==1][:, l].sum()
                     if (j == self.nblks):
                         ld_sum_jn = ld_sum
-                    trace[j, k, l] = self._calc_trace_from_ld(ld_sum_jn, N, self.nsnps_blk[j, k], self.nsnps_blk[j, l])
+                    trace[j, k, l] = utils._calc_trace_from_ld(ld_sum_jn, N, self.nsnps_blk[j, k], self.nsnps_blk[j, l])
         return trace
 
     def _read_ldproj(self):
         '''
-        Read the LD projection matrix (X^T Xz) instead of trace summaries. LD projection matrices
+        Read the LD score matrix (X^T Xz) instead of trace summaries. LD projection matrices
         are in np binary format (.npy)
+        TODO: allow reading in the LDSC-formatted files (.l2.ldscore & others)
         '''
         self.ld_proj = np.load(self.ldprojpath, allow_pickle=False)
         self.nsnps = self.ld_proj.shape[0]
         self.nbins = self.ld_proj.shape[1]
-        self.log._log("Loaded the LD projection matrix with "+str(self.nsnps)+" SNPs and "+\
+        self.log._log("Loaded the LD score matrix with "+str(self.nsnps)+" SNPs and "+\
                         str(self.nbins)+" bins")

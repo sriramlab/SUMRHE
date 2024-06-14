@@ -1,8 +1,9 @@
 import numpy as np
+import pandas as pd
 
 def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
     """
-    partition the first array (a 1D np array) by the annotation (a 1D array). return a nested list.
+    Partition the first array (a 1D np array) by the annotation (a 1D array). return a nested list.
     This function assumes that a SNP can belong to only one bin.
     """
     partitions = {i: [] for i in range(nbins)}
@@ -13,7 +14,7 @@ def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, 
 
 def _partition_bin_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
     """
-    partition the first array (a 1D np array) by the annotation (a 1D array). return a nested list.
+    Partition the first array (a 1D np array) by the annotation (a 1D array). return a nested list.
     This function assumes that a SNP can belong to multiple bins.
     """
     partitions = {i: [] for i in range(nbins)}
@@ -21,10 +22,43 @@ def _partition_bin_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbin
         partitions[bin] = [jn_values[snp] for snp in range(len(jn_values)) if jn_annot[row, bin]]
     return [partitions[i] for i in range(nbins)], [len(partitions[i]) for i in range(nbins)]
 
+def _calc_lsum(tr, n, m1, m2):
+    '''
+    Calculate the sum of the LD scores from the trace estimates
+    '''
+    return (tr - n)*(m1*m2)/pow(n,2)
 
-# def _partition_count(jn_annot: np.ndarray, nbins: int):
-#     """
-#     return the partitioned count
-#     """
-#     counts = np.zeros(nbins, dtype=int)
-#     value_cnts = 
+def _calc_trace_from_ld(ldsum, n, m1, m2):
+    '''
+    Calculate the trace from the sum of the LD scores
+    '''
+    return ldsum*pow(n, 2)/(m1*m2) + n
+
+def _calc_jn_subsample(alist):
+    '''
+    From a list/array return an array of leave-one-out (jackknife) subsamples
+    the last element is the sum of all elements
+    '''
+    total = sum(alist)
+    jn_sub = [total - val for val in alist]
+    jn_sub.append(total)
+    return np.array(jn_sub)
+
+def _read_multiple_lines(file_path, num_lines, sep=','):
+    '''
+    Processes a input file (num_lines) lines at a time
+    '''
+    values = pd.read_csv(file_path, chunksize=num_lines)
+    for val in values:
+        yield val.to_numpy()
+
+def _map_idx(snpid, npartition):
+    '''
+    create a mapping of SNP id -> idx
+    '''
+    mapping = {}
+    partition = _partition(snpid, npartition)
+    for idx, part in enumerate(partition):
+        for snp in part:
+            mapping[snp] = idx
+    return mapping

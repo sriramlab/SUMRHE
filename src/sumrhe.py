@@ -115,11 +115,11 @@ class Sumrhe:
             h2_est = self.solve_linear_equation(pred_tr[i], rhs[i])
             self.herits[idx][i] = np.append(h2_est, h2_est[:-1].sum()) # append total h2 as the last val
         if (self.verbose):
-            sigmas = ["sigma^2_g" + str(i) for i in range(self.nbins)] + ["\sigma^2_e"]
+            sigmas = ["sigma^2_g" + str(i) for i in range(self.nbins)] + ["sigma^2_e"]
             sigmas_str = "["+", ".join(sigmas)+"]\n"
-            self.log._log("Normal equation:\n"+np.array2string(pred_tr[self.nblks], precision=2, separator=', ')+"\n\t\tx\n"\
+            self.log._log("Normal equation:\n"+np.array2string(pred_tr[self.nblks], precision=2, separator=', ')+"\n\t\t*\n"\
                 +sigmas_str+"\t\t=\n"+np.array2string(rhs[self.nblks], precision=2, separator=', '))
-            self.log._log("Solution:"+np.array2string(self.herits[idx][self.nblks], precision=3, separator=', '))
+            self.log._log("Solution:\n"+np.array2string(self.herits[idx][self.nblks][:-1], precision=3, separator=', '))
         return self.herits[idx]
 
     def _run_jackknife(self, idx):
@@ -164,15 +164,19 @@ if __name__ == '__main__':
     while i < len(arg):
         if arg[i].startswith('-'):
             if (i == 0):
-                log._log("\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
-            else:
-                log._log("\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) else "")
-            i += 1
+                log._log("\t"+arg[i]+" "+arg[i + 1] if i + 1 < len(arg) and not arg[i+1].startswith('-') else "")
+                i += 1
+            elif (i + 1 < len(arg)):
+                if arg[i+1].startswith('-'):
+                    log._log("\t"+arg[i])
+                else:
+                    log._log("\t"+arg[i]+" "+arg[i + 1])
+                    i += 1
         else:
             log._log(arg[i] if i==0 else '\t\t'+arg[i])
         i += 1
     if (args.trace is None) and (args.rhe is None) and (args.ldproj is None):
-        log._log("!!! Either trace sumamry, RHE trace output or LD projection matrix must be provided !!!")
+        log._log("!!! Either trace sumamry, RHE trace output or LD score (truncated or stochastic) must be provided !!!")
         sys.exit(1)
     if (args.save_trace is not None) and ((args.rhe is None) and (args.ldproj is None)):
         # TODO: allow combining the trace summaries with rhe traceoutputs

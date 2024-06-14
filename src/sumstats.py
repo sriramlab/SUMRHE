@@ -4,15 +4,6 @@ Format should be:
     SNPID, NMISS (or OBS_CT), Z
 '''
 
-"""
-TODO: Some thoughts. Just now, I restructured the code such that the whole thing calculates the normal equation,
-and the sumrhe.py can do jackknife on the partitioned heritability. What now needs to be done is to partition the
-summary stats (here) so that I can reconstruct the RHS of the normal eq. I need to consider two scenarios: first is
-if the SNP ID's were provided (a la .bim file), which is the more preferred situation, or second, if the SNP ID's were
-not provided. In the second case, I'd have to track SNPs simply based on their indices, but does it make sense to do
-the same in the former or should I use the raw SNP ID's for keeping track?
-"""
-
 import numpy as np
 from os import listdir
 import utils
@@ -116,10 +107,10 @@ class Sumstats:
                 partition, nsnps_partition = utils._partition_bin_non_overlapping(blk_zscores, blk_annot, self.nbins)
                 matched_zscores.append(partition)
                 nsnps_blk[i] = nsnps_partition
-            self.log._log("Using " + str(self.nsnps) + " SNPs to calculate the RHS of the normal equation")
+            self.log._log("Using " + str(self.nsnps) + " SNPs to calculate the RHS of the normal equation...")
         else:
             """
-            This whole func needs restructuing :(
+            TODO: This whole func needs restructuing :(
             """
             zscore_dict = dict(zip(self.snpids, self.zscores))
             snpid_dict = dict(zip(self.snpids, self.snplist))
