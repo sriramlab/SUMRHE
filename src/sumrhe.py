@@ -30,7 +30,7 @@ parser.add_argument("--max-chisq", action='store', default=None, type=float, \
 parser.add_argument("--filter-both-sides", action='store_true', default=False,\
                     help='When filtering SNPs, remove their effects on both trace and yKy.'
                     ' This requires the (truncated) LD scores of all the SNPs used in trace calculation')
-parser.add_argument("--ldscore", default=None, type=str, \
+parser.add_argument("--ldscores", default=None, type=str, \
                     help='File path for LD scores of the reference SNPs, used for filtering non-polygenic SNPs')
 parser.add_argument("--out", default=None, type=str, \
                     help='Output file path to save the analysis log and result (.log)')
@@ -40,8 +40,6 @@ parser.add_argument("--verbose", action="store_true", default=False,\
                     help='Verbose mode: print out the normal equations')
 parser.add_argument("--suppress", action="store_true", default=False,\
                     help='Suppress mode: do not print out the outputs to stdout (log file only)')
-parser.add_argument("--ldproj", default=None, type=str, \
-                    help='File path for LD projection matrix in binary (.brz)')
 parser.add_argument("--njack", default=100, type=int, \
                     help='Number of jackknife blocks (only if using ld projection matrix)')
 parser.add_argument("--annot", default=None, type=str, \
@@ -49,13 +47,13 @@ parser.add_argument("--annot", default=None, type=str, \
 
 class Sumrhe:
     def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, \
-            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldproj=None, njack=None, annot=None):
+            log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldscores=None, njack=None, annot=None):
         self.mem = mem
         self.log = log
         self.timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         self.start_time = time.time()
         self.log._log("Analysis started at: "+str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time)))+" "+str(self.timezone))
-        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldproj=ldproj, log=self.log, nblks=njack, annot=annot)
+        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldscores=ldscores, log=self.log, nblks=njack, annot=annot)
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
         self.annot = self.tr.annot
@@ -175,10 +173,10 @@ if __name__ == '__main__':
         else:
             log._log(arg[i] if i==0 else '\t\t'+arg[i])
         i += 1
-    if (args.trace is None) and (args.rhe is None) and (args.ldproj is None):
+    if (args.trace is None) and (args.rhe is None) and (args.ldscores is None):
         log._log("!!! Either trace sumamry, RHE trace output or LD score (truncated or stochastic) must be provided !!!")
         sys.exit(1)
-    if (args.save_trace is not None) and ((args.rhe is None) and (args.ldproj is None)):
+    if (args.save_trace is not None) and ((args.rhe is None) and (args.ldscores is None)):
         # TODO: allow combining the trace summaries with rhe traceoutputs
         log._log("!!! RHE trace output or LD projection matrix must be provided for --save-trace !!!")
     if (args.max_chisq is not None):
@@ -188,6 +186,6 @@ if __name__ == '__main__':
 
     sums = Sumrhe(bim_path=args.bim, rhe_path=args.rhe, sum_path=args.trace, save_path=args.save_trace, pheno_path=args.pheno,\
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, \
-                filter_both=args.filter_both_sides, ldproj=args.ldproj, njack=args.njack, annot=args.annot)
+                filter_both=args.filter_both_sides, ldscores=args.ldscores, njack=args.njack, annot=args.annot)
     sums._run()
     sums._log()

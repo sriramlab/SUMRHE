@@ -21,13 +21,13 @@ import utils
 import sys
 
 class Trace:
-    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldproj=None, nblks=100, annot=None):
+    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldscores=None, nblks=100, annot=None):
         self.log = log
         self.rhepath = rhepath
         self.sumpath = sumpath
         self.savepath = savepath
-        self.ldprojpath = ldproj
-        self.ld_proj = None
+        self.ldscorespath = ldscores
+        self.ldscores = None
         self.lsums = []
         self.sums = None
         self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
@@ -38,7 +38,6 @@ class Trace:
         self.nsnps_blk = None # array for keeping track of number of SNPs in each leave-one-out blk
         self.nsnps_bin = None
         self.nsnps_blk_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
-        self.ldscores = None
         if (bimpath is None) or (bimpath == ""):
             self.log._log("!!! SNP list (.bim) is generally recommended !!!")
         elif (bimpath.endswith(".bim")):
@@ -54,22 +53,21 @@ class Trace:
                 self._save_trace()
         elif (sumpath is not None):
             self._read_trace()
-        elif (ldproj is not None):
-            self._read_ldproj()
+        elif (ldscores is not None):
+            self._read_ldscores()
         
         self._read_annot(annot)
 
     
     def _read_annot(self, annotpath):
         if (annotpath is None):
-            self.annot = np.ones(self.nsnps)
+            self.annot = np.ones((self.nsnps, 1))
             self.log._log("Running with single component")
         else:
             self.annot = np.loadtxt(annotpath)
             if (self.annot.ndim == 1):
                 self.annot = self.annot.reshape(-1, 1)
             self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))
-
         if (self.nbins != self.annot.shape[1]):
             self.log._log("!!! number of components in annotation does not match the input trace summary !!!")
             sys.exit(1)
@@ -170,30 +168,30 @@ class Trace:
             +"\n-- genome-wide LDscore sum:\n"+np.array2string(self.sums[-1], precision=3, separator=', '))
         return self.sums
     
-    def _read_ldscore(self, path=None):
-        ''' 
-        For filtering SNP's. Adjust trace estimates based on (truncated) LD scores; this is optional
-        LD scores should be in the standard LD score format (CHR SNP BP L2)
-        '''
-        if (path == ""):
-            self.log._log("!!! Invalid LD score path given. Proceeding filtering without ld scores !!!")
-            return
-        else:
-            ldscores = []
-            with open(path, 'r') as fd:
-                fd.next()
-                for line in fd:
-                    ldscores.append(line.split()[3])
-            # save ldscores as a dictionary
-            self.ldscores = dict(zip(self.snplist, ldscores))
-        return
+    # def _read_ldscore(self, path=None):
+    #     ''' 
+    #     For filtering SNP's. Adjust trace estimates based on (truncated) LD scores; this is optional
+    #     LD scores should be in the standard LD score format (CHR SNP BP L2)
+    #     '''
+    #     if (path == ""):
+    #         self.log._log("!!! Invalid LD score path given. Proceeding filtering without ld scores !!!")
+    #         return
+    #     else:
+    #         ldscores = []
+    #         with open(path, 'r') as fd:
+    #             fd.next()
+    #             for line in fd:
+    #                 ldscores.append(line.split()[3])
+    #         # save ldscores as a dictionary
+    #         self.ldscores = dict(zip(self.snplist, ldscores))
+    #     return
             
 
     def _calc_trace(self, nsample):
         self.log._log("Calculating trace...")
         ## ensure that annotation dimension matches that of the trace summaries or LD scores
-        if (self.ld_proj is not None):
-            return self._calc_trace_from_ldproj(nsample)
+        if (self.ldscores is not None):
+            return self._calc_trace_from_ldscores(nsample)
         else:
             return self._calc_trace_from_sums(nsample)
     
@@ -250,30 +248,29 @@ class Trace:
     #     return mat.sum()*pow(n/m, 2) + n
 
 
-    def _calc_trace_from_ldproj(self, N):
+    def _calc_trace_from_ldscores(self, N):
         trace = np.full((self.nblks+1, self.nbins+1, self.nbins+1), N)
         for k in range(self.nbins):
             for l in range(self.nbins):
-                ld_sum = self.ld_proj[self.annot[:, k]==1][:, l].sum()
+                ld_sum = self.ldscores[self.annot[:, k]==1][:, l].sum()
                 for j in range(self.nblks+1):
                     idx_start = self.blk_size*j
                     idx_end = self.nsnps if j==self.nblks-1 else self.blk_size*(j+1)
                     annot_jn = self.annot[idx_start:idx_end]
-                    ld_proj_jn = self.ld_proj[idx_start:idx_end]
-                    ld_sum_jn = ld_sum - ld_proj_jn[annot_jn[:, k]==1][:, l].sum()
+                    ldscores_jn = self.ldscores[idx_start:idx_end]
+                    ld_sum_jn = ld_sum - ldscores_jn[annot_jn[:, k]==1][:, l].sum()
                     if (j == self.nblks):
                         ld_sum_jn = ld_sum
                     trace[j, k, l] = utils._calc_trace_from_ld(ld_sum_jn, N, self.nsnps_blk[j, k], self.nsnps_blk[j, l])
         return trace
 
-    def _read_ldproj(self):
+    def _read_ldscores(self):
         '''
-        Read the LD score matrix (X^T Xz) instead of trace summaries. LD projection matrices
-        are in np binary format (.npy)
-        TODO: allow reading in the LDSC-formatted files (.l2.ldscore & others)
+        Read the LD score matrix (X^T Xz) instead of trace summaries. Works with either the (truncated) LDSC LD scores (.l2.ldscore.gz) or
+        the genome-wide LD scores (.l2.npy)
         '''
-        self.ld_proj = np.load(self.ldprojpath, allow_pickle=False)
-        self.nsnps = self.ld_proj.shape[0]
-        self.nbins = self.ld_proj.shape[1]
+        self.ldscores = np.load(self.ldscorespath, allow_pickle=False)
+        self.nsnps = self.ldscores.shape[0]
+        self.nbins = self.ldscores.shape[1]
         self.log._log("Loaded the LD score matrix with "+str(self.nsnps)+" SNPs and "+\
                         str(self.nbins)+" bins")
