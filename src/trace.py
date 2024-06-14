@@ -33,6 +33,7 @@ class Trace:
         self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
         self.nrhe = 0
         self.snplist = None
+        self.nsamp = 0 # number of samples used for trace summaries or RHE trace
         self.nsnps = 0
         self.nsnps_blk = None # array for keeping track of number of SNPs in each leave-one-out blk
         self.nsnps_bin = None
@@ -92,6 +93,7 @@ class Trace:
             next(fd)
             nsamp, nsnps, nblks, nbins = map(int, fd.readline().split(','))
         if not idx:
+            self.nsamp = nsamp
             self.nblks = nblks
             self.nbins = nbins
         elif (nblks != self.nblks):
@@ -128,42 +130,45 @@ class Trace:
             trace_files = sorted([prefix + f.rstrip('.trace') for f in listdir(self.rhepath) if f.endswith('.trace')])
         for i, f in enumerate(trace_files):
             self._read_one_rhe(f, i)
-        self.lsums = np.array(self.lsums)
         self.log._log("Finished reading "+str(len(trace_files))+" RHE trace outputs.")
         self.sums = self.lsums.mean(axis=0)
-        self.stds = self.lsums.std(axis=0)
-        return self.sums, self.stds
+        return self.sums
     
     def _save_trace(self):
         ''' Save trace summaries as a file'''
         with open(self.savepath+".tr", 'w') as fd:
-            fd.write("LDsum,LDsum_std,NSNP\n")
-            for i in range(self.nblks+1):
-                fd.write(format(self.sums[i],'.3f')+","+format(self.stds[i], '.3f')+","+format(self.nsnps_blk[i], '.0f')+"\n")
-        self.log._log("Saved trace summary into "+self.savepath+".tr")
+            header_str = ','.join(f'LD_SUM_{i:d}' for i in range(self.nbins))
+            fd.write(header_str+",NSNPS_JACKKNIFE\n")
+            for j in range(self.nblks+1):
+                for k in range(self.nbins):
+                    row_str = ','.join(f'{self.sums[j,k,l]:.3f}' for l in range(self.nbins))
+                    row_str += f',{self.nsnps_blk[j, k]:.0f}\n'
+                    fd.write(row_str)
+        with open(self.savepath+".MN", 'w') as fd:
+            fd.write("NSAMPLE,NSNPS,NBLKS,NBINS\n")
+            fd.write(str(self.nsamp)+","+str(self.nsnps)+","+str(self.nblks)+","+str(self.nbins))
+        self.log._log("Saved trace summary into "+self.savepath+".tr/.MN")
     
     def _read_trace(self):
-        ''' read from a trace summary file'''
-        sums = []
-        stds = []
-        nsnps_blk = []
-        with open(self.sumpath , 'r') as fd:
+        '''
+        Read trace summaries (block-wise LD scores)
+        '''
+        with open(self.sumpath+".MN", 'r') as fd:
             next(fd)
-            for line in fd:
-                s, st, nj = map(float, line.strip().split(','))
-                sums.append(s)
-                stds.append(st)
-                nsnps_blk.append(nj)
-                
-        self.sums = np.array(sums)
-        self.stds = np.array(stds)
-        self.nblks = len(self.sums)-1
-        self.nsnps = nsnps_blk[self.nblks]
-        self.nsnps_blk = np.array(nsnps_blk)
+            self.nsamp, self.nsnps, self.nblks, self.nbins = map(int, fd.readline().split(','))
+        self.sums = np.zeros((self.nblks+1, self.nbins, self.nbins))
+        self.nsnps_blk = np.zeros((self.nblks+1, self.nbins))
+        
+        # read in trace values
+        for cnt, vals in enumerate(utils._read_multiple_lines(self.sumpath+".tr", self.nbins)):
+            self.sums[cnt] = vals[:, :-1]
+            self.nsnps_blk[cnt] = vals[:, -1].transpose()
+
         self.log._log("Reading in trace summaries from "+self.sumpath)
-        self.log._log("-- avg. jackknife LDscore sum:\t"+format(self.sums[:-1].mean(), '.3f')+"\n-- number of jackknife blocks:\t"+str(self.nblks)\
-            +"\n-- genome-wide LDscore sum:\t"+format(self.sums[-1], '.3f'))
-        return self.sums, self.stds
+        self.log._log("-- avg. jackknife LDscore sum:\n"+np.array2string(self.sums[:-1].mean(axis=0), precision=3, separator=', ')\
+            +"\n-- number of jackknife blocks:\t"+str(self.nblks)\
+            +"\n-- genome-wide LDscore sum:\n"+np.array2string(self.sums[-1], precision=3, separator=', '))
+        return self.sums
     
     def _read_ldscore(self, path=None):
         ''' 
