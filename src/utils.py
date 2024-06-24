@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import os
+import re
 
 def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
     """
@@ -62,3 +64,11 @@ def _map_idx(snpid, npartition):
         for snp in part:
             mapping[snp] = idx
     return mapping
+
+def _find_matching_files(regex, prefix):
+    '''
+    regex file matching. returns a list of matches (with specified path prefix)
+    '''
+    pattern = re.compile(regex)
+    files = os.listdir(prefix)
+    return [prefix+file for file in files if pattern.match(file)]

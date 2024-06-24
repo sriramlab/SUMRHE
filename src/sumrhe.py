@@ -31,7 +31,7 @@ parser.add_argument("--filter-both-sides", action='store_true', default=False,\
                     help='When filtering SNPs, remove their effects on both trace and yKy.'
                     ' This requires the (truncated) LD scores of all the SNPs used in trace calculation')
 parser.add_argument("--ldscores", default=None, type=str, \
-                    help='File path for LD scores of the reference SNPs, used for filtering non-polygenic SNPs')
+                    help='File path for LD scores of the reference SNPs. You may use either the traditional (truncated) LD scores (.l2.ldscore.gz) or genome-wide stochastic LD scores (.gw.ldscore.npy)')
 parser.add_argument("--out", default=None, type=str, \
                     help='Output file path to save the analysis log and result (.log)')
 parser.add_argument("--all-snps", action='store_true', default=False,\
@@ -63,7 +63,7 @@ class Sumrhe:
         else:
             self.sums = sumstats.Sumstats(nblks=self.nblks, snplist = self.snplist, chisq_threshold=chisq_threshold, log=self.log, annot=self.annot, nbins=self.nbins)
         self.phen_dir = None
-        # check whether the path for pheno is a directory or a file. count # of phenotypes
+        # check whether the path for pheno is a directory or a file (or even regex). count # of phenotypes
         if os.path.exists(pheno_path):
             if os.path.isdir(pheno_path):
                 self.log._log("Reading phenotype sumstat files from a directory...")
@@ -104,9 +104,6 @@ class Sumrhe:
             return scipy.linalg.solve_triangular(R, np.dot(Q.T, y))
 
     def _calc_h2(self, idx):
-        '''
-        in order to incorporate multiple-component case, solve a system of linear equations instead
-        '''
         rhs = self.sums.rhs
         pred_tr = self.tr._calc_trace(self.nsamp[idx])
         for i in range(self.nblks+1):
@@ -123,7 +120,8 @@ class Sumrhe:
     def _run_jackknife(self, idx):
         ''' run snp-level block jackknife '''
         self.hsums[idx, :, 0] = self.herits[idx, self.nblks] # h2 from all snps
-        self.hsums[idx, :, 1] = np.sqrt(np.sum(np.square(self.herits[idx, :-1, :] - self.hsums[idx, :, 0]))*(self.nblks-1)/self.nblks) # jackknife SE
+        self.hsums[idx, :, 1] = np.sqrt(np.sum(np.square(self.herits[idx, :-1, :] - self.hsums[idx, :, 0].T), axis=0)*(self.nblks-1)/self.nblks) # jackknife SE
+
         
     def _run(self):
         for i in range(self.npheno):

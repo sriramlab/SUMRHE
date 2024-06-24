@@ -33,8 +33,8 @@ class Trace:
         self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
         self.nrhe = 0
         self.snplist = None
-        self.nsamp = 0 # number of samples used for trace summaries or RHE trace
-        self.nsnps = 0
+        self.nsamp = [] # number of samples used for trace summaries or RHE trace; can be of varying size
+        self.nsnps = 0 # number of SNPs is fixed
         self.nsnps_blk = None # array for keeping track of number of SNPs in each leave-one-out blk
         self.nsnps_bin = None
         self.nsnps_blk_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
@@ -90,8 +90,8 @@ class Trace:
         with open(filename+".MN", 'r') as fd:
             next(fd)
             nsamp, nsnps, nblks, nbins = map(int, fd.readline().split(','))
+        self.nsamp.append(nsamp)
         if not idx:
-            self.nsamp = nsamp
             self.nblks = nblks
             self.nbins = nbins
         elif (nblks != self.nblks):
@@ -129,7 +129,7 @@ class Trace:
         for i, f in enumerate(trace_files):
             self._read_one_rhe(f, i)
         self.log._log("Finished reading "+str(len(trace_files))+" RHE trace outputs.")
-        self.sums = self.lsums.mean(axis=0)
+        self.sums = np.mean(self.lsums, axis=0)
         return self.sums
     
     def _save_trace(self):
