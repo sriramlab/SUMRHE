@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import os
 import re
+import time
+import datetime
 
 def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
     """
@@ -72,3 +74,13 @@ def _find_matching_files(regex, prefix):
     pattern = re.compile(regex)
     files = os.listdir(prefix)
     return [prefix+file for file in files if pattern.match(file)]
+
+def _get_time():
+    current_time = time.time()
+    return current_time
+
+def _get_timestr(current_time):
+    timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+    timestr = str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)))+" "+str(timezone)
+    return timestr
+    

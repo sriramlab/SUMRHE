@@ -1,0 +1,222 @@
+"""
+Stochastically estimate (partitioned) genome-wide LD scores. Part of the code is modified from Eric Liu's script
+"""
+
+import numpy as np
+import pandas as pd
+from bed_reader import open_bed
+from sklearn.preprocessing import StandardScaler
+import multiprocessing as mp
+from multiprocessing import Process, Manager
+from tqdm import tqdm
+from time import time
+import scipy
+import utils
+import sys
+import gc
+
+class GenomewideLDScore:
+    def __init__(self, bed_path, annot_path, out_path, log, num_vecs=10, num_workers=4, step_size=1000, covar_path=None):
+        self.G = open_bed(bed_path+".bed")
+        self.nsamp, self.nsnps = self.G.shape
+        self.nvecs = num_vecs
+        self.nworkers = num_workers
+        self.step_size = step_size
+        self.snp_idx = np.arange(self.nsnps)
+        self.partitioned_idx = None
+        self.log = log
+        self.log._log("Calculating genome-wide LD scores from genotype file: "+str(bed_path))
+        self.log._log("Number of individuals: "+str(self.nsamp)+", Number of SNPs: "+str(self.nsnps))
+        self.outpath = out_path
+        if (annot_path is not None):
+            self.log._log("With annotation file: "+str(annot_path))
+        self._read_annot(annot_path)
+        scaler = StandardScaler()
+        if covar_path is not None:
+            covar_df = pd.read_csv(covar_path, sep=' ')
+            if 'ethnic' in covar_df.columns:
+                covar_df = covar_df.drop('ethnic', axis=1)
+            covar = scaler.fit_transform(covar_df.iloc[:, 2:].values)
+    
+    def _compute_Xz(self, current_input):
+        j, current_indices = current_input
+        num_snps = len(current_indices)
+        Zs = np.random.normal(size=(num_snps, self.num_vecs))
+
+        geno = self.G.read(index=np.s_[:, current_indices])
+        means = np.nanmean(geno, axis=0)
+        stds = np.nanstd(geno, axis=0)
+
+        geno = (geno-means)/stds
+        geno[np.isnan(geno)] = 0
+
+        geno = np.array(geno, order='F')
+        Zs = np.array(Zs, order='F')
+        cur_Xz = scipy.linalg.blas.sgemm(1.0, geno, Zs)
+
+        return cur_Xz
+
+    def _compute_XtXz(self, current_input):
+        j, current_indices = current_input
+        num_snps = len(current_indices)
+
+        geno = self.G.read(index=np.s_[:, current_indices])
+        means = np.nanmean(geno, axis=0)
+        stds = np.nanstd(geno, axis=0)
+
+        geno = (geno-means)/stds
+        geno[np.isnan(geno)] = 0
+
+        geno_t = np.array(geno.T, order='F')
+        cur_XtXz = scipy.linalg.blas.sgemm(1.0, geno_t, self.temp_results)
+        return (j, cur_Xtxz)
+
+    def _compute_Xz_blk(self, blk_idxs):
+        """
+        Compute Xk z given partitioned indices for the blk. Returns (N x nblks x nvecs)
+        Read in the genotype blk altogether, then splice it afterwards (to make things faster).
+        idx passed is the "blk" idx, i.e., always starts from 0.
+        """
+        blk_start, blk_end, idxs = blk_idxs # j == blk idx, idxs == nested list of snp idx
+        nsnps = sum([len(binidx) for binidx in idxs])
+        Xz = np.zeros((self.nbins, self.nsamp, self.nvecs))
+        Zs = np.random.normal(size=(nsnps, self.nvecs))
+
+        geno = self.G.read(index=np.s_[:, blk_start: blk_end])
+        means = np.nanmean(geno, axis=0)
+        stds = np.nanstd(geno, axis=0)
+
+        geno = (geno-means)/stds
+        geno[np.isnan(geno)] = 0
+
+        geno = np.array(geno, order='F')
+        Zs = np.array(Zs, order='F')
+        
+        for k, binidx in enumerate(idxs):
+            Xz[k, :, :] = scipy.linalg.blas.sgemm(1.0, geno[:, binidx], Zs[binidx, :])
+        return Xz
+    
+
+    def _compute_XtXz_blk(self, blk_idx):
+        """
+        For blk genotype, multiply with X_k z to get XtXkz.
+        """
+        blk_start, blk_end = blk_idx
+
+        geno = self.G.read(index=np.s_[:, blk_start:blk_end])
+        means = np.nanmean(geno, axis=0)
+        stds = np.nanstd(geno, axis=0)
+
+        geno = (geno-means)/stds
+        geno[np.isnan(geno)] = 0
+
+        ## TODO: benchmark sgemm vs. np broadcasting
+        geno_t = np.array(geno.T, order='F')
+        XtXz = np.zeros((blk_end - blk_start, self.nbins, self.nvecs))
+        for k in range(self.nbins):
+            XtXz[:, k, :] = scipy.linalg.blas.sgemm(1.0, geno_t, self.Xz[k])
+
+        #XtXz = np.einsum('nm,knb->mkb', geno, self.Xz)
+        return (blk_start, blk_end, XtXz)
+
+
+    def _read_annot(self, annot_path):
+        if (annot_path is None):
+            self.annot = np.ones((self.nsnps, 1))
+            self.log._log("Calculating genome-wide (non-partitioned) LD score")
+        else:
+            self.annot = np.loadtxt(annot_path)
+            if (self.annot.ndim == 1):
+                self.annot = self.annot.reshape(-1, 1)
+            self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))
+        
+        if (self.nsnps != self.annot.shape[0]):
+            self.log._log(f"!!! number of SNPs in annotation ({self.annot.shape[0]}) does not match the input genotype file ({self.nsnps}) !!!")
+            sys.exit(1)
+        self.nbins = self.annot.shape[1]
+        self.log._log(f"Nbins: {self.nbins}")
+        self.nsnps_bin = self.annot.sum(axis=0)
+
+    
+    def _partition_index(self, snpidx, annot) -> list[np.ndarray]:
+        """
+        partition snp indices by annotation
+        """
+        return [snpidx[annot[:, c] == 1] for c in range(self.nbins)]
+
+
+    def _compute_ldscore(self):
+        """
+        Use multi-processing to calculate the X_j^T X_k Z.
+        General sketch: read in each block of genotype, calculate X_k Z for that blk. Aggregate X_k through all blks.
+        Then re-read each blk from the start, multiply by the previous result (loop over k) to get X_j ^ T X_k (no need for agg this time).
+        """
+        self.start_time = utils._get_time()
+        self.log._log("Genome-wide LD score calculation started at: "+utils._get_timestr(self.start_time))
+        self.log._log(f"num_vecs: {self.nvecs}, num_workers: {self.nworkers}, step_size: {self.step_size}")
+
+        all_indices = np.arange(self.nsnps)[::self.step_size] # indices of all the snps in each blk
+        self.nblks = len(all_indices)
+        self.partitioned_idx = [] # partitioned index, nblks x list(list(idx in each bin))
+        Xz_input = []
+        XtXz_input = []
+        for j in range(self.nblks):
+            idx_start = self.step_size*j
+            idx_end = self.nsnps if j==self.nblks-1 else self.step_size*(j+1)
+            annot_blk = self.annot[idx_start:idx_end]
+            Xz_input.append((idx_start, idx_end, self._partition_index(np.arange(len(annot_blk)), annot_blk)))
+            XtXz_input.append((idx_start, idx_end))
+        
+        self.Xz = np.zeros((self.nbins, self.nsamp, self.nvecs))
+
+        with mp.Pool(self.nworkers) as pool:
+            with tqdm(total=self.nblks) as pbar:
+                pbar.set_description('Calculating Xz')
+                for result in pool.imap_unordered(self._compute_Xz_blk, Xz_input):
+                    self.Xz += result
+                    gc.collect()
+                    pbar.update()
+        pool.join()
+
+        self.Xz_time = utils._get_time()
+        self.log._log("Calculation of Xz (for each partition) completed. Runtime: "+format(self.Xz_time - self.start_time, '.3f')+" s")
+
+        self.XtXz = np.zeros((self.nsnps, self.nbins, self.nvecs))
+
+        with mp.Pool(self.nworkers) as pool:
+            with tqdm(total=self.nblks) as pbar:
+                pbar.set_description('Calculating XtXz')
+                for result in pool.imap_unordered(self._compute_XtXz_blk, XtXz_input):
+                    idx_start, idx_end, XtXz_blk = result
+                    self.XtXz[idx_start:idx_end, :, :] = XtXz_blk
+                    gc.collect()
+                    pbar.update()
+        pool.join()
+
+        self.XtXz = self.XtXz / self.nsamp
+
+        self.XtXz_time = utils._get_time()
+        self.log._log("Calculation of XtXz (for each partition) completed. Runtime: "+format(self.XtXz_time - self.Xz_time, '.3f')+" s")
+
+        self.log._log("Converting XtXz into genome-wide (partitioned) LD scores.")
+        self.gwldscore = self.nsamp/(self.nsamp+1) * (np.square(self.XtXz).mean(axis=2) - self.nsnps_bin/self.nsamp)
+        self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}")
+        with open(f"{self.outpath}.gw.ldscore.npy", 'wb') as f:
+            np.save(f, self.gwldscore, allow_pickle=False)
+        self.end_time = utils._get_time()
+        self.log._log(f"Calculation of genome-wide (non-partitioned) LD score ended at "+utils._get_timestr(self.end_time))
+        self.log._log("Runtime: "+format(self.end_time - self.start_time, '.3f')+" s")
+
+        
+
+
+
+
+
+        
+
+
+
+        
+
+            

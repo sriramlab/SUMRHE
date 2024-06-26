@@ -1,13 +1,13 @@
-import sumstats
-import trace
+from sumstats import Sumstats
+from trace import Trace
 from logger import Logger
+from gw_ldscore import GenomewideLDScore
 
 import argparse
 import os
 import sys
 import numpy as np
-import time
-import datetime
+import utils
 
 parser = argparse.ArgumentParser(description='SUM-RHE')
 parser.add_argument("--trace", default=None, type=str, \
@@ -19,8 +19,7 @@ parser.add_argument("--save-trace", default=None, type=str, \
                     help='File path for saving trace summaries calculated from RHE trace outputs (.tr)')
 parser.add_argument("--pheno", default=None, type=str, \
                    help='File path for phenotype-specific summary statistics.'
-                    ' If the path is a directory, all summary statistics (ending with .sumstat) will be used.',
-                    required=True)
+                    ' If the path is a directory, all summary statistics (ending with .sumstat) will be used.')
 parser.add_argument("--bim", default=None, type=str, \
                     help='File path for the reference .bim file used for trace calculation')
 parser.add_argument("--max-chisq", action='store', default=None, type=float, \
@@ -33,7 +32,7 @@ parser.add_argument("--filter-both-sides", action='store_true', default=False,\
 parser.add_argument("--ldscores", default=None, type=str, \
                     help='File path for LD scores of the reference SNPs. You may use either the traditional (truncated) LD scores (.l2.ldscore.gz) or genome-wide stochastic LD scores (.gw.ldscore.npy)')
 parser.add_argument("--out", default=None, type=str, \
-                    help='Output file path to save the analysis log and result (.log)')
+                    help='Output file path to save the analysis log and result (.log) or the genome-wide LD scores (.gw.ldscore.npy)')
 parser.add_argument("--all-snps", action='store_true', default=False,\
                     help="Use all the SNPs in the phenotype sumamry statistics. Make sure this is safe to do so.")
 parser.add_argument("--verbose", action="store_true", default=False,\
@@ -43,17 +42,18 @@ parser.add_argument("--suppress", action="store_true", default=False,\
 parser.add_argument("--njack", default=100, type=int, \
                     help='Number of jackknife blocks (only if using ld projection matrix)')
 parser.add_argument("--annot", default=None, type=str, \
-                    help='Path of the annotation file (only if using partitioned heritability)')                    
+                    help='Path of the annotation file (only if using partitioned heritability)')
+parser.add_argument("--geno", default=None, type=str, \
+                    help='Path of the genotype file to calculate the genome-wide LD scores. Calculates partitioned scores if --annot is also specified.')    
 
 class Sumrhe:
     def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, \
             log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldscores=None, njack=None, annot=None):
         self.mem = mem
         self.log = log
-        self.timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
-        self.start_time = time.time()
-        self.log._log("Analysis started at: "+str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.start_time)))+" "+str(self.timezone))
-        self.tr = trace.Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldscores=ldscores, log=self.log, nblks=njack, annot=annot)
+        self.start_time = utils._get_time()
+        self.log._log("Analysis started at: "+utils._get_timestr(self.start_time))
+        self.tr = Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldscores=ldscores, log=self.log, nblks=njack, annot=annot)
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
         self.annot = self.tr.annot
@@ -136,14 +136,14 @@ class Sumrhe:
         return self.hsums
 
     
-    def _log(self):
+    def _logoff(self):
         for i in range(self.npheno):
             h2 = self.hsums[i, -1][0]
             se = self.hsums[i, -1][1]
             self.log._log("^^^ Phenotype "+str(i)+" Estimated total heritability (h^2): "+format(h2, '.5f')+" SE: "+format(se, '.5f'))
         
-        self.end_time = time.time()
-        self.log._log("Analysis ended at: "+str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.end_time)))+' '+str(self.timezone))
+        self.end_time = utils._get_time()
+        self.log._log("Analysis ended at: "+utils._get_timestr(self.end_time))
         self.log._log("run time: "+format(self.end_time - self.start_time, '.3f')+" s")
         if (self.out is not None):
             self.log._log("Saved log in "+ self.out + ".log")
@@ -171,19 +171,27 @@ if __name__ == '__main__':
         else:
             log._log(arg[i] if i==0 else '\t\t'+arg[i])
         i += 1
-    if (args.trace is None) and (args.rhe is None) and (args.ldscores is None):
-        log._log("!!! Either trace sumamry, RHE trace output or LD score (truncated or stochastic) must be provided !!!")
-        sys.exit(1)
-    if (args.save_trace is not None) and ((args.rhe is None) and (args.ldscores is None)):
-        # TODO: allow combining the trace summaries with rhe traceoutputs
-        log._log("!!! RHE trace output or LD projection matrix must be provided for --save-trace !!!")
-    if (args.max_chisq is not None):
-        if (args.max_chisq <= .0):
-            log._log("!!! max-chisq must be a positive value !!!")
-            sys.exit(1)
 
-    sums = Sumrhe(bim_path=args.bim, rhe_path=args.rhe, sum_path=args.trace, save_path=args.save_trace, pheno_path=args.pheno,\
+    if (args.geno is not None):
+        if (args.out is None):
+            log._log("!!! An output path to save the genome-wide LD scores must be provided !!!")
+            sys.exit(1)
+        gwld = GenomewideLDScore(args.geno, args.annot, args.out, log)
+        gwld._compute_ldscore()
+
+    else:
+        if (args.trace is None) and (args.rhe is None) and (args.ldscores is None):
+            log._log("!!! Either trace sumamry, RHE trace output or LD score (truncated or stochastic) must be provided !!!")
+            sys.exit(1)
+        if (args.save_trace is not None) and ((args.rhe is None) and (args.ldscores is None)):
+            # TODO: allow combining the trace summaries with rhe traceoutputs
+            log._log("!!! RHE trace output or LD projection matrix must be provided for --save-trace !!!")
+        if (args.max_chisq is not None):
+            if (args.max_chisq <= .0):
+                log._log("!!! max-chisq must be a positive value !!!")
+                sys.exit(1)
+        sums = Sumrhe(bim_path=args.bim, rhe_path=args.rhe, sum_path=args.trace, save_path=args.save_trace, pheno_path=args.pheno,\
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, \
                 filter_both=args.filter_both_sides, ldscores=args.ldscores, njack=args.njack, annot=args.annot)
-    sums._run()
-    sums._log()
+        sums._run()
+        sums._logoff()

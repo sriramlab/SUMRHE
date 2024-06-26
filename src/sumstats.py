@@ -67,7 +67,7 @@ class Sumstats:
         Nmiss = []
         zscores = []
         self.name = name
-        ## TEMPORARY FIX: read in the LDSC sumstat
+        ## TODO: read in the LDSC sumstat
         if (self.snplist is None):
             with open(path, 'r') as fd:
                 next(fd)

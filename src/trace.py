@@ -59,16 +59,16 @@ class Trace:
         self._read_annot(annot)
 
     
-    def _read_annot(self, annotpath):
-        if (annotpath is None):
+    def _read_annot(self, annot_path):
+        if (annot_path is None):
             self.annot = np.ones((self.nsnps, 1))
             self.log._log("Running with single component")
         else:
-            self.annot = np.loadtxt(annotpath)
+            self.annot = np.loadtxt(annot_path)
             if (self.annot.ndim == 1):
                 self.annot = self.annot.reshape(-1, 1)
             self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))
-        if (self.nbins != self.annot.shape[1]):
+        if (self.nbins != self.annot.shape[1]) or (self.nsnps != self.annot.shape[0]):
             self.log._log("!!! number of components in annotation does not match the input trace summary !!!")
             sys.exit(1)
         self.blk_size = self.nsnps//self.nblks
@@ -81,6 +81,7 @@ class Trace:
             if (i==self.nblks-1):
                 idx_end = self.nsnps
             self.nsnps_blk[i] -= self.annot[idx_start: idx_end].sum(axis=0)
+        #TODO: format .trace file (if --save-trace is specified w/ --rhe)
         np.savetxt("nsnps_blk.txt", self.nsnps_blk.reshape(-1, 1), fmt='%d')
        
 
