@@ -23,7 +23,6 @@ class GenomewideLDScore:
         self.nworkers = num_workers
         self.step_size = step_size
         self.snp_idx = np.arange(self.nsnps)
-        self.partitioned_idx = None
         self.log = log
         self.log._log("Calculating genome-wide LD scores from genotype file: "+str(bed_path))
         self.log._log("Number of individuals: "+str(self.nsamp)+", Number of SNPs: "+str(self.nsnps))
@@ -37,39 +36,6 @@ class GenomewideLDScore:
             if 'ethnic' in covar_df.columns:
                 covar_df = covar_df.drop('ethnic', axis=1)
             covar = scaler.fit_transform(covar_df.iloc[:, 2:].values)
-    
-    def _compute_Xz(self, current_input):
-        j, current_indices = current_input
-        num_snps = len(current_indices)
-        Zs = np.random.normal(size=(num_snps, self.num_vecs))
-
-        geno = self.G.read(index=np.s_[:, current_indices])
-        means = np.nanmean(geno, axis=0)
-        stds = np.nanstd(geno, axis=0)
-
-        geno = (geno-means)/stds
-        geno[np.isnan(geno)] = 0
-
-        geno = np.array(geno, order='F')
-        Zs = np.array(Zs, order='F')
-        cur_Xz = scipy.linalg.blas.sgemm(1.0, geno, Zs)
-
-        return cur_Xz
-
-    def _compute_XtXz(self, current_input):
-        j, current_indices = current_input
-        num_snps = len(current_indices)
-
-        geno = self.G.read(index=np.s_[:, current_indices])
-        means = np.nanmean(geno, axis=0)
-        stds = np.nanstd(geno, axis=0)
-
-        geno = (geno-means)/stds
-        geno[np.isnan(geno)] = 0
-
-        geno_t = np.array(geno.T, order='F')
-        cur_XtXz = scipy.linalg.blas.sgemm(1.0, geno_t, self.temp_results)
-        return (j, cur_Xtxz)
 
     def _compute_Xz_blk(self, blk_idxs):
         """
@@ -110,7 +76,7 @@ class GenomewideLDScore:
         geno = (geno-means)/stds
         geno[np.isnan(geno)] = 0
 
-        ## TODO: benchmark sgemm vs. np broadcasting
+        ## TODO: benchmark sgemm vs. np broadcasting - in small scale, looks like sgemm is faster (could be b/c sgemm is used in Xz estimation)
         geno_t = np.array(geno.T, order='F')
         XtXz = np.zeros((blk_end - blk_start, self.nbins, self.nvecs))
         for k in range(self.nbins):
@@ -155,9 +121,7 @@ class GenomewideLDScore:
         self.log._log("Genome-wide LD score calculation started at: "+utils._get_timestr(self.start_time))
         self.log._log(f"num_vecs: {self.nvecs}, num_workers: {self.nworkers}, step_size: {self.step_size}")
 
-        all_indices = np.arange(self.nsnps)[::self.step_size] # indices of all the snps in each blk
-        self.nblks = len(all_indices)
-        self.partitioned_idx = [] # partitioned index, nblks x list(list(idx in each bin))
+        self.nblks = len(np.arange(self.nsnps)[::self.step_size])
         Xz_input = []
         XtXz_input = []
         for j in range(self.nblks):
@@ -200,7 +164,7 @@ class GenomewideLDScore:
 
         self.log._log("Converting XtXz into genome-wide (partitioned) LD scores.")
         self.gwldscore = self.nsamp/(self.nsamp+1) * (np.square(self.XtXz).mean(axis=2) - self.nsnps_bin/self.nsamp)
-        self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}")
+        self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}.gw.ldscore.npy")
         with open(f"{self.outpath}.gw.ldscore.npy", 'wb') as f:
             np.save(f, self.gwldscore, allow_pickle=False)
         self.end_time = utils._get_time()
