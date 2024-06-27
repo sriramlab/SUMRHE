@@ -16,7 +16,7 @@ import sys
 import gc
 
 class GenomewideLDScore:
-    def __init__(self, bed_path, annot_path, out_path, log, num_vecs=10, num_workers=4, step_size=1000, covar_path=None):
+    def __init__(self, bed_path, annot_path, out_path, log, num_vecs=10, num_workers=4, step_size=1000):
         self.G = open_bed(bed_path+".bed")
         self.nsamp, self.nsnps = self.G.shape
         self.nvecs = num_vecs
@@ -30,12 +30,6 @@ class GenomewideLDScore:
         if (annot_path is not None):
             self.log._log("With annotation file: "+str(annot_path))
         self._read_annot(annot_path)
-        scaler = StandardScaler()
-        if covar_path is not None:
-            covar_df = pd.read_csv(covar_path, sep=' ')
-            if 'ethnic' in covar_df.columns:
-                covar_df = covar_df.drop('ethnic', axis=1)
-            covar = scaler.fit_transform(covar_df.iloc[:, 2:].values)
 
     def _compute_Xz_blk(self, blk_idxs):
         """
