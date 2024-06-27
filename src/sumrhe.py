@@ -28,9 +28,9 @@ parser.add_argument("--filter-both-sides", action='store_true', default=False,\
                     help='When filtering SNPs, remove their effects on both trace and yKy.'
                     ' This requires the (truncated) LD scores of all the SNPs used in trace calculation')
 parser.add_argument("--ldscores", default=None, type=str, \
-                    help='File path for LD scores of the reference SNPs. You may use either the traditional (truncated) LD scores (.l2.ldscore.gz) or genome-wide stochastic LD scores (.gw.ldscore.npy)')
+                    help='File path for LD scores of the reference SNPs. You may use either the traditional (truncated) LD scores (.l2.ldscore.gz) or genome-wide stochastic LD scores (.gw.ldscore.gz)')
 parser.add_argument("--out", default=None, type=str, \
-                    help='Output file path to save the analysis log and result (.log) or the genome-wide LD scores (.gw.ldscore.npy)')
+                    help='Output file path to save the analysis log and result (.log) or the genome-wide LD scores (.gw.ldscore.gz)')
 parser.add_argument("--all-snps", action='store_true', default=False,\
                     help="Use all the SNPs in the phenotype sumamry statistics. Make sure this is safe to do so.")
 parser.add_argument("--verbose", action="store_true", default=False,\
@@ -72,7 +72,6 @@ if __name__ == '__main__':
             sys.exit(1)
         gwld = GenomewideLDScore(args.geno, args.annot, args.out, log)
         gwld._compute_ldscore()
-
     else:
         if (args.trace is None) and (args.rhe is None) and (args.ldscores is None):
             log._log("!!! Either trace sumamry, RHE trace output or LD score (truncated or stochastic) must be provided !!!")

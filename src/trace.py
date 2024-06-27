@@ -16,7 +16,6 @@ it is recommended to input .bim for the list of SNPs (read in once)
 
 import numpy as np
 from os import listdir, path
-from logger import Logger
 import utils
 import sys
 
@@ -167,26 +166,7 @@ class Trace:
         self.log._log("-- avg. jackknife LDscore sum:\n"+np.array2string(self.sums[:-1].mean(axis=0), precision=3, separator=', ')\
             +"\n-- number of jackknife blocks:\t"+str(self.nblks)\
             +"\n-- genome-wide LDscore sum:\n"+np.array2string(self.sums[-1], precision=3, separator=', '))
-        return self.sums
-    
-    # def _read_ldscore(self, path=None):
-    #     ''' 
-    #     For filtering SNP's. Adjust trace estimates based on (truncated) LD scores; this is optional
-    #     LD scores should be in the standard LD score format (CHR SNP BP L2)
-    #     '''
-    #     if (path == ""):
-    #         self.log._log("!!! Invalid LD score path given. Proceeding filtering without ld scores !!!")
-    #         return
-    #     else:
-    #         ldscores = []
-    #         with open(path, 'r') as fd:
-    #             fd.next()
-    #             for line in fd:
-    #                 ldscores.append(line.split()[3])
-    #         # save ldscores as a dictionary
-    #         self.ldscores = dict(zip(self.snplist, ldscores))
-    #     return
-            
+        return self.sums          
 
     def _calc_trace(self, nsample):
         self.log._log("Calculating trace...")

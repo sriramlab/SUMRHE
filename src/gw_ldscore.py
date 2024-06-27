@@ -24,6 +24,7 @@ class GenomewideLDScore:
         self.step_size = step_size
         self.snp_idx = np.arange(self.nsnps)
         self.log = log
+        self._read_bim(bed_path+".bim")
         self.log._log("Calculating genome-wide LD scores from genotype file: "+str(bed_path))
         self.log._log("Number of individuals: "+str(self.nsamp)+", Number of SNPs: "+str(self.nsnps))
         self.outpath = out_path
@@ -97,6 +98,16 @@ class GenomewideLDScore:
         self.log._log(f"Nbins: {self.nbins}")
         self.nsnps_bin = self.annot.sum(axis=0)
 
+    def _read_bim(self, bim_path):
+        if (bim_path is None):
+            self.log._log("No .bim file is provided; all (anonymous) SNPs will be used")
+            self.snplist = None
+        else:
+            self.log._log(f"Reading {bim_path} for SNPs")
+            self.snplist = pd.read_csv(bim_path, header=None, sep='\t')
+        if (len(self.snplist) != self.nsnps):
+            self.log._log(f"!!! The number of SNPs in the .bed file ({self.nsnps}) does not match the .bim file ({len(self.snplist)}) !!!")
+            sys.exit(1)
     
     def _partition_index(self, snpidx, annot) -> list[np.ndarray]:
         """
@@ -159,8 +170,18 @@ class GenomewideLDScore:
         self.log._log("Converting XtXz into genome-wide (partitioned) LD scores.")
         self.gwldscore = self.nsamp/(self.nsamp+1) * (np.square(self.XtXz).mean(axis=2) - self.nsnps_bin/self.nsamp)
         self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}.gw.ldscore.npy")
-        with open(f"{self.outpath}.gw.ldscore.npy", 'wb') as f:
-            np.save(f, self.gwldscore, allow_pickle=False)
+        snpcols = ['CHR', 'SNP', 'BP']
+        if (self.snplist is None):
+            self.snpdf = pd.DataFrame(np.nan*np.ones((self.nsnps, 3)), columns=snpcols)
+        else:
+            self.snpdf = self.snplist.iloc[:, :3]
+            self.snpdf.columns = snpcols
+        
+        # TODO: change this to LDSC format (where .annot headers are used for L2 names)
+        l2cols = ['L2_'+str(i) for i in range(self.nbins)]
+        self.gwldscore = pd.DataFrame(self.gwldscore, columns = l2cols)
+        self.gwldscore = pd.concat([self.snpdf, self.gwldscore], axis=1)
+        self.gwldscore.to_csv(f'{self.outpath}.gw.ldscore.gz', index=False, compression='gzip', sep='\t', float_format='%.3f')
         self.end_time = utils._get_time()
         self.log._log(f"Calculation of genome-wide (non-partitioned) LD score ended at "+utils._get_timestr(self.end_time))
         self.log._log("Runtime: "+format(self.end_time - self.start_time, '.3f')+" s")
