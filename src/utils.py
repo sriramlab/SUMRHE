@@ -56,6 +56,22 @@ def _read_multiple_lines(file_path, num_lines, sep=','):
     for val in values:
         yield val.to_numpy()
 
+def _read_with_optional_header(file_path):
+    with open(file_path, 'r') as fd:
+        line = fd.readline().strip()
+        try:
+            vals = [float(x) for x in line.split()]
+            is_header = False
+        except ValueError:
+            is_header = True
+    if is_header:
+        header = line.split()
+        data = np.loadtxt(file_path, skiprows=1)
+        return header, data
+    else:
+        data = np.loadtxt(file_path)
+        return None, data
+
 def _map_idx(snpid, npartition):
     '''
     create a mapping of SNP id -> idx

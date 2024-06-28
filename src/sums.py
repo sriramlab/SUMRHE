@@ -7,13 +7,13 @@ import sys
 import utils
 
 class Sumrhe:
-    def __init__(self, bim_path=None, rhe_path=None, sum_path=None, save_path=None, pheno_path=None, out=None, chisq_threshold=0, \
+    def __init__(self, bim_path=None, sum_path=None, pheno_path=None, out=None, chisq_threshold=0, \
             log=None, mem=False, allsnp=False, verbose=False, filter_both=False, ldscores=None, njack=None, annot=None):
         self.mem = mem
         self.log = log
         self.start_time = utils._get_time()
         self.log._log("Analysis started at: "+utils._get_timestr(self.start_time))
-        self.tr = Trace(bimpath=bim_path, rhepath=rhe_path, sumpath=sum_path, savepath=save_path, ldscores=ldscores, log=self.log, nblks=njack, annot=annot)
+        self.tr = Trace(bimpath=bim_path, sumpath=sum_path, ldscores=ldscores, log=self.log, nblks=njack, annot=annot)
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
         self.annot = self.tr.annot
@@ -24,6 +24,7 @@ class Sumrhe:
             self.sums = Sumstats(nblks=self.nblks, snplist = self.snplist, chisq_threshold=chisq_threshold, log=self.log, annot=self.annot, nbins=self.nbins)
         self.phen_dir = None
         # check whether the path for pheno is a directory or a file (or even regex). count # of phenotypes
+        # TODO: allow regex matching for file names
         if os.path.exists(pheno_path):
             if os.path.isdir(pheno_path):
                 self.log._log("Reading phenotype sumstat files from a directory...")
@@ -82,7 +83,6 @@ class Sumrhe:
         self.hsums[idx, :, 0] = self.herits[idx, self.nblks] # h2 from all snps
         self.hsums[idx, :, 1] = np.sqrt(np.sum(np.square(self.herits[idx, :-1, :] - self.hsums[idx, :, 0].T), axis=0)*(self.nblks-1)/self.nblks) # jackknife SE
 
-        
     def _run(self):
         for i in range(self.npheno):
             pheno_path=self.phen_dir[i]

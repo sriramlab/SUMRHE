@@ -1,5 +1,6 @@
 '''
 Read the phenotype-specific summary statistics (generally PLINK)
+The standard LDSC summary statistics format (.sumstat) works.
 Format should be:
     SNPID, NMISS (or OBS_CT), Z
 '''
@@ -9,10 +10,10 @@ from os import listdir
 import utils
 
 class Sumstats:
-    # Sumstats class is called in the main (sumrhe.py) module
-    # it's called after the trace module, which will then call this module
-    # in order to read in the phenotype sumstats.
-    # can contain only a single phenotype sumstats at a time (to save memory)
+    '''
+    Sumstats class is called in the sums (sums.py) module. It's called after the trace module, which will then call this module
+    in order to read in the phenotype sumstats. Current version can store only a single phenotype sumstats at a time (to save memory)
+    '''
     def __init__(self, nblks=100, snplist = None, chisq_threshold=0, log=None, both_side=False, annot=None, nbins=1):
         self.log = log
         self.nblks = nblks

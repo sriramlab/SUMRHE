@@ -1,30 +1,24 @@
 '''
-Read the trace output from RHE & summarize into trace statistics
+Read in the trace (or LD) summary statistics to estimate the trace for the summary stats.
+For .tr file, there should be (njackknife+1) rows excluding the header, where
+the last row is the trace summary (i.e., sum of the LD scores) from the entire genotype.
+The SNP sets should be the same for all the outputs -- it is recommended to input .bim for the list of SNPs (read in once)
 
-the RHE output metadata (.MN) should have the following:
-    # individuals, # SNPs
-    N, M
-the RHE output tracedata (.trace) should have the following:
-    jackknife subsample trace, # SNPs
-    tr, M'
-There should be (njackknife+1) rows excluding the header, where
-the last row is the trace with the entire genotype.
-
-The SNP sets should be the same for all the outputs. 
-it is recommended to input .bim for the list of SNPs (read in once)
+For .ldscore.gz, standard LDSC ld score format works.
 '''
 
 import numpy as np
+import pandas as pd
 from os import listdir, path
 import utils
 import sys
 
 class Trace:
-    def __init__(self, bimpath = None, rhepath=None, sumpath=None, savepath=None, log=None, ldscores=None, nblks=100, annot=None):
+    def __init__(self, bimpath = None, sumpath=None, log=None, ldscores=None, nblks=100, annot=None):
         self.log = log
-        self.rhepath = rhepath
         self.sumpath = sumpath
-        self.savepath = savepath
+        # self.rhepath = rhepath
+        # self.savepath = savepath
         self.ldscorespath = ldscores
         self.ldscores = None
         self.lsums = []
@@ -38,19 +32,21 @@ class Trace:
         self.nsnps_bin = None
         self.nsnps_blk_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
         if (bimpath is None) or (bimpath == ""):
-            self.log._log("!!! SNP list (.bim) is generally recommended !!!")
+            if (self.ldscorespath is None):
+                self.log._log("!!! SNP list (.bim) is generally recommended if using trace summaries (.tr) !!!")
         elif (bimpath.endswith(".bim")):
             with open(bimpath, 'r') as fd:
                 for line in fd:
                     self.snplist.append(line.split()[1])
         else:
-            self.log._log('!!! '+bimpath+' is not a .bim file! !!!')
+            self.log._log(f'!!! {bimpath} is not a .bim file! !!!')
         
-        if (rhepath is not None):
-            self._read_all_rhe()
-            if (savepath is not None):
-                self._save_trace()
-        elif (sumpath is not None):
+        # if (rhepath is not None):
+        #     self._read_all_rhe()
+        #     if (savepath is not None):
+        #         self._save_trace()
+        # el
+        if (sumpath is not None):
             self._read_trace()
         elif (ldscores is not None):
             self._read_ldscores()
@@ -248,9 +244,11 @@ class Trace:
     def _read_ldscores(self):
         '''
         Read the LD score matrix (X^T Xz) instead of trace summaries. Works with either the (truncated) LDSC LD scores (.l2.ldscore.gz) or
-        the genome-wide LD scores (.l2.npy)
+        the genome-wide LD scores (.gw.ldscore.gz)
         '''
-        self.ldscores = np.load(self.ldscorespath, allow_pickle=False)
+        self.ldscores_df = pd.read_csv(self.ldscorespath, compression='gzip', sep='\t', index_col=False)
+        self.ldscores = self.ldscores_df.iloc[:, 3:].to_numpy()
+        self.snplist = self.ldscores_df['SNP'].to_numpy()
         self.nsnps = self.ldscores.shape[0]
         self.nbins = self.ldscores.shape[1]
         self.log._log("Loaded the LD score matrix with "+str(self.nsnps)+" SNPs and "+\

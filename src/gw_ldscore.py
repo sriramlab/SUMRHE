@@ -1,17 +1,14 @@
 """
 Stochastically estimate (partitioned) genome-wide LD scores. Part of the code is modified from Eric Liu's script
 """
+import utils
 
 import numpy as np
 import pandas as pd
 from bed_reader import open_bed
-from sklearn.preprocessing import StandardScaler
 import multiprocessing as mp
-from multiprocessing import Process, Manager
 from tqdm import tqdm
-from time import time
 import scipy
-import utils
 import sys
 import gc
 
@@ -82,11 +79,15 @@ class GenomewideLDScore:
 
 
     def _read_annot(self, annot_path):
+        """
+        Read in the annotation. If the file includes a header, save it as the names for the annotations.
+        If not, then have dummy names and read in the annotation.
+        """
         if (annot_path is None):
             self.annot = np.ones((self.nsnps, 1))
             self.log._log("Calculating genome-wide (non-partitioned) LD score")
         else:
-            self.annot = np.loadtxt(annot_path)
+            self.l2cols, self.annot = utils._read_with_optional_header(annot_path)
             if (self.annot.ndim == 1):
                 self.annot = self.annot.reshape(-1, 1)
             self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))
@@ -95,6 +96,10 @@ class GenomewideLDScore:
             self.log._log(f"!!! number of SNPs in annotation ({self.annot.shape[0]}) does not match the input genotype file ({self.nsnps}) !!!")
             sys.exit(1)
         self.nbins = self.annot.shape[1]
+        if (self.l2cols is None):
+            self.l2cols = ['L2_'+str(i) for i in range(self.annot.shape[1])]
+        else:
+            self.l2cols = [i + 'L2' for i in self.l2cols]
         self.log._log(f"Nbins: {self.nbins}")
         self.nsnps_bin = self.annot.sum(axis=0)
 
@@ -169,7 +174,7 @@ class GenomewideLDScore:
 
         self.log._log("Converting XtXz into genome-wide (partitioned) LD scores.")
         self.gwldscore = self.nsamp/(self.nsamp+1) * (np.square(self.XtXz).mean(axis=2) - self.nsnps_bin/self.nsamp)
-        self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}.gw.ldscore.npy")
+        self.log._log(f"Saving the genome-wide (partitioned) LD scores into: {self.outpath}.gw.ldscore.gz")
         snpcols = ['CHR', 'SNP', 'BP']
         if (self.snplist is None):
             self.snpdf = pd.DataFrame(np.nan*np.ones((self.nsnps, 3)), columns=snpcols)
@@ -177,14 +182,13 @@ class GenomewideLDScore:
             self.snpdf = self.snplist.iloc[:, :3]
             self.snpdf.columns = snpcols
         
-        # TODO: change this to LDSC format (where .annot headers are used for L2 names)
-        l2cols = ['L2_'+str(i) for i in range(self.nbins)]
-        self.gwldscore = pd.DataFrame(self.gwldscore, columns = l2cols)
+        self.gwldscore = pd.DataFrame(self.gwldscore, columns = self.l2cols)
         self.gwldscore = pd.concat([self.snpdf, self.gwldscore], axis=1)
         self.gwldscore.to_csv(f'{self.outpath}.gw.ldscore.gz', index=False, compression='gzip', sep='\t', float_format='%.3f')
         self.end_time = utils._get_time()
         self.log._log(f"Calculation of genome-wide (non-partitioned) LD score ended at "+utils._get_timestr(self.end_time))
         self.log._log("Runtime: "+format(self.end_time - self.start_time, '.3f')+" s")
+        self.log._save_log(self.outpath+".log")
 
         
 
