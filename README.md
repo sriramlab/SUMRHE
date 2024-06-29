@@ -85,7 +85,7 @@ You would need your own individual-level genotype for this (running with ```-tr`
 
 ### 2. Estimating genome-wide LD scores
 
-Other methods use sliding fixed-windows (typically < 2Mb) to estimate the LD scores of the SNPs. This results in under-estimation of LD scores, as the long-range LD (> 2Mb) is not captured. Often times, this results in biased estimates of heritability. One of the advantages of Randomized Haseman-Elston regression is that it can efficiently estimate genome-wide correlations between SNPs through random projection. In the original RHE papers, this is used to estimate the trace of squared kinship matrix. ```sumrhe``` extends this idea further by estimating the genome-wide (partitioned) LD scores.
+Other methods use sliding fixed-sized windows (typically < 2Mb) to estimate the LD scores of the SNPs. This results in under-estimation of LD scores, as the long-range LD (> 2Mb) is not captured. Often times, this results in upward-biased estimates of heritability. One of the advantages of Randomized Haseman-Elston regression is that it can efficiently estimate genome-wide correlations between SNPs through random projection. In the original RHE papers, this is used to estimate the trace of squared kinship matrix. ```sumrhe``` extends this idea further by estimating the genome-wide (partitioned) LD scores.
 
 Here is an example run command (```estimate_gwldscore.sh``` in the [example](example) directory):
 ```
@@ -104,7 +104,6 @@ This script should run within a few seconds and create a gzip file named ```doub
 --pheno : File path for phenotype-specific summary statistics (.sumstat). If the path is a directory, all summary statistics (ending with .sumstat) will be used.
 --bim : File path for the reference .bim file used for trace calculation (optional)
 --out : Output file path to save the analysis log and result (.log) or the genome-wide LD scores (.gw.ldscore.gz)
---save-trace : File path for saving trace summaries calculated from RHE trace outputs (.tr/.MN)
 --max-chisq : Filter out SNPs with chi-sq statistic above the threshold.
 --filter-both-sides : When filtering SNPs, remove their effects on both trace and yKy.
 --ldscore : File path for LD scores of the reference SNPs. You may use either the traditional (truncated) LD scores (.l2.ldscore.gz) or genome-wide stochastic LD scores (.gw.ldscore.gz)
@@ -118,6 +117,19 @@ This script should run within a few seconds and create a gzip file named ```doub
 --nvecs : Number of random vectors to use for estimating stochastic genome-wide LD scores. Default is 10.
 --step_size : Number of SNPs to process in each step of estimating stochastic genome-wide LD scores. Default is 1000.
 ```
+
+## TODO's
+✅ partitioned heritability
+
+✅ stochastic genome-wide LD scores
+
+☑️ easier input file formatting
+
+☑️ better SE estimates with LD scores
+
+☑️ both-side filtering of outlier SNPs
+
+☑️ genetic correlation
 
 ## References
 You may refer to the following bioRxiv preprint for more details on how SUM-RHE works & benchmark results:
