@@ -1,25 +1,25 @@
 from logger import Logger
 from gw_ldscore import GenomewideLDScore
 from sums import Sumrhe
+import utils
 
 import argparse
 import sys
 import numpy as np
-import utils
 
 parser = argparse.ArgumentParser(description='SUM-RHE')
 parser.add_argument("--trace", default=None, type=str, \
-                    help='File path for trace summary statistics (.tr and .MN)')
+                    help='File path for trace summary statistics (.tr) and corresponding metadata (.MN)')
 # parser.add_argument("--rhe", default=None, type=str, \
 #                    help='Directory where the rhe trace outputs (from same population & SNP sets) are stored.'
 #                     ' Each output must have .trace and .MN files')
-# parser.add_argument("--save-trace", default=None, type=str, \
-#                     help='File path for saving trace summaries calculated from RHE trace outputs (.tr)')
+parser.add_argument("--save-trace", default=None, type=str, \
+                    help='File path for saving trace summaries (.tr) and corresponding metadata (.MN)')
 parser.add_argument("--pheno", default=None, type=str, \
                    help='File path for phenotype-specific summary statistics.'
                     ' If the path is a directory, all summary statistics (ending with .sumstat) will be used.')
 parser.add_argument("--bim", default=None, type=str, \
-                    help='File path for the reference .bim file used for trace calculation')
+                    help='File path for the reference .bim file used for trace calculation (optional)')
 parser.add_argument("--max-chisq", action='store', default=None, type=float, \
                     help='Filter out SNPs with chi-sq statistic above the threshold.'
                     ' This can be done either only on the yKy or on both sides (use --filter-both-sides);'
@@ -89,7 +89,7 @@ if __name__ == '__main__':
             if (args.max_chisq <= .0):
                 log._log("!!! max-chisq must be a positive value !!!")
                 sys.exit(1)
-        sums = Sumrhe(bim_path=args.bim, sum_path=args.trace, pheno_path=args.pheno,\
+        sums = Sumrhe(bim_path=args.bim, sum_path=args.trace, save_path = args.save_trace, pheno_path=args.pheno,\
             chisq_threshold=args.max_chisq, log=log, out=args.out, allsnp=args.all_snps, verbose=args.verbose, \
                 filter_both=args.filter_both_sides, ldscores=args.ldscores, njack=args.njack, annot=args.annot)
         sums._run()

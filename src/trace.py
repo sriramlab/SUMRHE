@@ -6,31 +6,31 @@ The SNP sets should be the same for all the outputs -- it is recommended to inpu
 
 For .ldscore.gz, standard LDSC ld score format works.
 '''
+import utils
 
 import numpy as np
 import pandas as pd
 from os import listdir, path
-import utils
 import sys
 
 class Trace:
-    def __init__(self, bimpath = None, sumpath=None, log=None, ldscores=None, nblks=100, annot=None):
+    def __init__(self, bimpath = None, sumpath=None, savepath=None, log=None, ldscores=None, nblks=100, annot=None, verbose=False):
         self.log = log
         self.sumpath = sumpath
-        # self.rhepath = rhepath
-        # self.savepath = savepath
+        self.savepath = savepath
         self.ldscorespath = ldscores
         self.ldscores = None
-        self.lsums = []
-        self.sums = None
+        self.sums = []
         self.nblks = nblks # nblks specified only if using ld proj; otherwise it'll be overwritten by trace summaries.
-        self.nrhe = 0
+        self.ntrace = 0
+        self.K = []
         self.snplist = None
-        self.nsamp = [] # number of samples used for trace summaries or RHE trace; can be of varying size
+        self.nsamp = [] # number of samples used for trace summaries; can be of varying size
         self.nsnps = 0 # number of SNPs is fixed
         self.nsnps_blk = None # array for keeping track of number of SNPs in each leave-one-out blk
         self.nsnps_bin = None
         self.nsnps_blk_filt = None # this is the nsnps for each jn, which is filtered in case of --filter-both-sides
+        self.verbose = verbose
         if (bimpath is None) or (bimpath == ""):
             if (self.ldscorespath is None):
                 self.log._log("!!! SNP list (.bim) is generally recommended if using trace summaries (.tr) !!!")
@@ -41,18 +41,14 @@ class Trace:
         else:
             self.log._log(f'!!! {bimpath} is not a .bim file! !!!')
         
-        # if (rhepath is not None):
-        #     self._read_all_rhe()
-        #     if (savepath is not None):
-        #         self._save_trace()
-        # el
         if (sumpath is not None):
-            self._read_trace()
+            self._read_all_trace()
+            if (savepath is not None):
+                self._save_trace()
         elif (ldscores is not None):
             self._read_ldscores()
         
         self._read_annot(annot)
-
     
     def _read_annot(self, annot_path):
         if (annot_path is None):
@@ -76,60 +72,14 @@ class Trace:
             if (i==self.nblks-1):
                 idx_end = self.nsnps
             self.nsnps_blk[i] -= self.annot[idx_start: idx_end].sum(axis=0)
-        #TODO: format .trace file (if --save-trace is specified w/ --rhe)
-        np.savetxt("nsnps_blk.txt", self.nsnps_blk.reshape(-1, 1), fmt='%d')
        
-
-    def _read_one_rhe(self, filename, idx):
-        # read in metadata
-        nsamp, nsnps, nblks, nbins = 0, 0, 0, 0 # at the moment, the number of blocks in all the trace stats must be the same
-        with open(filename+".MN", 'r') as fd:
-            next(fd)
-            nsamp, nsnps, nblks, nbins = map(int, fd.readline().split(','))
-        self.nsamp.append(nsamp)
-        if not idx:
-            self.nblks = nblks
-            self.nbins = nbins
-        elif (nblks != self.nblks):
-            self.log._log("!!! RHE output "+filename+" has incorrect number of jackknife blocks !!!")
-            return
-        elif (nbins != self.nbins):
-            self.log._log("!!! RHE output "+filename+" has incorrect number of annotation bins !!!")
-            return
-        trace = np.zeros((self.nblks+1, self.nbins, self.nbins))
-        nsnps_blk = np.zeros((self.nblks+1, self.nbins))
-        
-        # read in trace values
-        for cnt, vals in enumerate(utils._read_multiple_lines(filename+".trace", self.nbins)):
-            trace[cnt] = vals[:, :-1]
-            nsnps_blk[cnt] = vals[:, -1].transpose()
-        
-        # calculate sum of block LD for each jackknife subsample
-        lsum = np.zeros((nblks+1, self.nbins, self.nbins))
-        for k in range(self.nbins):
-            for l in range(self.nbins):
-                for j in range(self.nblks+1):
-                    lsum[j, k, l] =  utils._calc_lsum(trace[j, k, l], nsamp, nsnps_blk[j, k], nsnps_blk[j, l])
-        self.lsums.append(lsum)
-        self.nrhe += 1
-        # if idx is 0, save # of SNPs in each jackknife subsample (this should be the same in all outputs)
-        if not idx:
-            self.nsnps_blk = nsnps_blk
-            self.nsnps = nsnps
-        
-    def _read_all_rhe(self):
-        trace_files = [self.rhepath]
-        if path.isdir(self.rhepath):
-            prefix = self.rhepath.rstrip('/') + "/"
-            trace_files = sorted([prefix + f.rstrip('.trace') for f in listdir(self.rhepath) if f.endswith('.trace')])
-        for i, f in enumerate(trace_files):
-            self._read_one_rhe(f, i)
-        self.log._log("Finished reading "+str(len(trace_files))+" RHE trace outputs.")
-        self.sums = np.mean(self.lsums, axis=0)
-        return self.sums
     
     def _save_trace(self):
         ''' Save trace summaries as a file'''
+        with open(self.savepath+".MN", 'w') as fd:
+            fd.write("NSAMPLE,NSNPS,NBLKS,NBINS,K\n")
+            fd.write(f"{self.nsamp:.0f},{self.nsnps:.0f},{self.nblks:.0f},{self.nbins:.0f},{self.effective_K:.0f}")
+
         with open(self.savepath+".tr", 'w') as fd:
             header_str = ','.join(f'LD_SUM_{i:d}' for i in range(self.nbins))
             fd.write(header_str+",NSNPS_JACKKNIFE\n")
@@ -138,31 +88,72 @@ class Trace:
                     row_str = ','.join(f'{self.sums[j,k,l]:.3f}' for l in range(self.nbins))
                     row_str += f',{self.nsnps_blk[j, k]:.0f}\n'
                     fd.write(row_str)
-        with open(self.savepath+".MN", 'w') as fd:
-            fd.write("NSAMPLE,NSNPS,NBLKS,NBINS\n")
-            fd.write(str(self.nsamp)+","+str(self.nsnps)+","+str(self.nblks)+","+str(self.nbins))
-        self.log._log("Saved trace summary into "+self.savepath+".tr/.MN")
+        self.log._log(f"Saved trace summary into {self.savepath}(.tr/.MN)")
     
-    def _read_trace(self):
+    def _read_trace(self, filename, idx):
         '''
         Read trace summaries (block-wise LD scores)
         '''
-        with open(self.sumpath+".MN", 'r') as fd:
+        # read in metadata
+        nsamp, nsnps, nblks, nbins = 0, 0, 0, 0
+        with open(filename+".MN", 'r') as fd:
             next(fd)
-            self.nsamp, self.nsnps, self.nblks, self.nbins = map(int, fd.readline().split(','))
-        self.sums = np.zeros((self.nblks+1, self.nbins, self.nbins))
-        self.nsnps_blk = np.zeros((self.nblks+1, self.nbins))
+            nsamp, nsnps, nblks, nbins, K = map(int, fd.readline().split(','))
+        self.nsamp.append(nsamp)
+        self.K.append(K)
+
+        if not idx:
+            self.nsnps = nsnps
+            self.nblks = nblks
+            self.nbins = nbins
+        elif (nblks != self.nblks):
+            self.log._log("!!! Trace summary "+filename+" has incorrect number of jackknife blocks !!!")
+            return
+        elif (nbins != self.nbins):
+            self.log._log("!!! Trace summary "+filename+" has incorrect number of annotation bins !!!")
+            return
+
+        sums = np.zeros((self.nblks+1, self.nbins, self.nbins))
+        nsnps_blk = np.zeros((self.nblks+1, self.nbins))
         
         # read in trace values
-        for cnt, vals in enumerate(utils._read_multiple_lines(self.sumpath+".tr", self.nbins)):
-            self.sums[cnt] = vals[:, :-1]
-            self.nsnps_blk[cnt] = vals[:, -1].transpose()
+        for cnt, vals in enumerate(utils._read_multiple_lines(filename+".tr", self.nbins)):
+            sums[cnt] = vals[:, :-1]
+            nsnps_blk[cnt] = vals[:, -1].transpose()
 
-        self.log._log("Reading in trace summaries from "+self.sumpath)
-        self.log._log("-- avg. jackknife LDscore sum:\n"+np.array2string(self.sums[:-1].mean(axis=0), precision=3, separator=', ')\
-            +"\n-- number of jackknife blocks:\t"+str(self.nblks)\
-            +"\n-- genome-wide LDscore sum:\n"+np.array2string(self.sums[-1], precision=3, separator=', '))
-        return self.sums          
+        if not idx:
+            self.nsnps_blk = nsnps_blk
+        elif not (np.array_equal(self.nsnps_blk, nsnps_blk)):
+            self.log._log("!!! Trace summary "+filename+" has different annotations !!!")
+            sys.exit(1)
+        
+        self.sums.append(sums)
+        self.ntrace += 1
+
+        self.log._log(f"Read in trace summaries from {filename} generated with {K} random vectors")
+        if (self.verbose):
+            self.log._log("-- avg. jackknife LDscore sum:\n"+np.array2string(sums[:-1].mean(axis=0), precision=3, separator=', ')\
+                +"\n-- number of jackknife blocks:\t"+str(self.nblks)\
+                +"\n-- genome-wide LDscore sum:\n"+np.array2string(sums[-1], precision=3, separator=', '))
+        return self.sums
+        
+    def _read_all_trace(self):
+        trace_files = [self.sumpath]
+        if path.isdir(self.sumpath):
+            prefix = self.sumpath.rstrip('/') + "/"
+            trace_files = sorted([prefix + f.rstrip('.tr') for f in listdir(self.sumpath) if f.endswith('.tr')])
+        for i, f in enumerate(trace_files):
+            self._read_trace(f, i)
+        self.log._log("Finished reading "+str(len(trace_files))+" trace summaries.")
+        if (np.std(self.sums, axis=0).sum() == .0) and (self.ntrace > 1):
+            self.log._log("!!! Duplicate trace summaries are used -- effective number of random vectors remains unchanged. !!!")
+            self.effective_K = np.min(self.K)
+        else:
+            self.effective_K = np.sum(self.K)
+        ## TODO: is it correct to take a weighted average by sample size?
+        self.sums = np.average(self.sums, axis=0, weights=self.nsamp)
+        self.nsamp = np.mean(self.nsamp)
+        return self.sums
 
     def _calc_trace(self, nsample):
         self.log._log("Calculating trace...")
@@ -220,11 +211,6 @@ class Trace:
         ### in this case perhaps it's possible to remove those SNPs in the trace calculations as well
         ### implement this
 
-    # @staticmethod
-    # def _calc_trace_from_ld(mat, n, m1, m2):
-    #     return mat.sum()*pow(n/m, 2) + n
-
-
     def _calc_trace_from_ldscores(self, N):
         trace = np.full((self.nblks+1, self.nbins+1, self.nbins+1), N)
         for k in range(self.nbins):
@@ -253,3 +239,42 @@ class Trace:
         self.nbins = self.ldscores.shape[1]
         self.log._log("Loaded the LD score matrix with "+str(self.nsnps)+" SNPs and "+\
                         str(self.nbins)+" bins")
+        
+
+    # def _read_one_rhe(self, filename, idx):
+    #     # read in metadata
+    #     nsamp, nsnps, nblks, nbins = 0, 0, 0, 0
+    #     # the number of blocks in all the trace stats must be the same
+    #     with open(filename+".MN", 'r') as fd:
+    #         next(fd)
+    #         nsamp, nsnps, nblks, nbins = map(int, fd.readline().split(','))
+    #     self.nsamp.append(nsamp)
+    #     if not idx:
+    #         self.nblks = nblks
+    #         self.nbins = nbins
+    #     elif (nblks != self.nblks):
+    #         self.log._log("!!! RHE output "+filename+" has incorrect number of jackknife blocks !!!")
+    #         return
+    #     elif (nbins != self.nbins):
+    #         self.log._log("!!! RHE output "+filename+" has incorrect number of annotation bins !!!")
+    #         return
+    #     trace = np.zeros((self.nblks+1, self.nbins, self.nbins))
+    #     nsnps_blk = np.zeros((self.nblks+1, self.nbins))
+        
+    #     # read in trace values
+    #     for cnt, vals in enumerate(utils._read_multiple_lines(filename+".trace", self.nbins)):
+    #         trace[cnt] = vals[:, :-1]
+    #         nsnps_blk[cnt] = vals[:, -1].transpose()
+        
+    #     # calculate sum of block LD for each jackknife subsample
+    #     lsum = np.zeros((nblks+1, self.nbins, self.nbins))
+    #     for k in range(self.nbins):
+    #         for l in range(self.nbins):
+    #             for j in range(self.nblks+1):
+    #                 lsum[j, k, l] =  utils._calc_lsum(trace[j, k, l], nsamp, nsnps_blk[j, k], nsnps_blk[j, l])
+    #     self.lsums.append(lsum)
+    #     self.nrhe += 1
+    #     # if idx is 0, save # of SNPs in each jackknife subsample (this should be the same in all outputs)
+    #     if not idx:
+    #         self.nsnps_blk = nsnps_blk
+    #         self.nsnps = nsnps

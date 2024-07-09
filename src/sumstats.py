@@ -4,10 +4,10 @@ The standard LDSC summary statistics format (.sumstat) works.
 Format should be:
     SNPID, NMISS (or OBS_CT), Z
 '''
+import utils
 
 import numpy as np
 from os import listdir
-import utils
 
 class Sumstats:
     '''
