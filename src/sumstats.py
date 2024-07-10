@@ -68,7 +68,6 @@ class Sumstats:
         Nmiss = []
         zscores = []
         self.name = name
-        ## TODO: read in the LDSC sumstat
         if (self.snplist is None):
             with open(path, 'r') as fd:
                 next(fd)
@@ -110,22 +109,22 @@ class Sumstats:
                 nsnps_blk[i] = nsnps_partition
             self.log._log("Using " + str(self.nsnps) + " SNPs to calculate the RHS of the normal equation...")
         else:
-            """
-            TODO: This whole func needs restructuing :(
-            """
             zscore_dict = dict(zip(self.snpids, self.zscores))
             snpid_dict = dict(zip(self.snpids, self.snplist))
-            matched_snps = np.array([snpid_dict.get(pid) for pid in self.snpids])
-            self.matched_snps = matched_snps
-            nmissing = 0
+            self.matched_snps = np.array([snpid_dict.get(pid) for pid in self.snpids])
+            nmissing = len(self.snplist) - len(self.matched_snps)
             for i in range(self.nblks):
                 blk_size = len(self.snplist)//self.nblks
                 blk = self.snplist[blk_size*i: blk_size*(i+1)] if (i < self.nblks-1) else self.snplist[blk_size*i: ]
-                blk_zscores = np.array([zscore_dict.get(pid) for pid in blk])
-                matched_zscores.append(blk_zscores)
-                nmissing_blk = sum(1 for s in blk_zscores if s is None)
-                nmissing += nmissing_blk
-                nsnps_blk[i] = len(blk_zscores) - nmissing_blk
+                blk_zscores = np.array([zscore_dict.get(pid, .0) for pid in blk])
+                
+                blk_annot = self.annot[blk_size*i:blk_size*(i+1)] if (i < self.nblks-1) else self.annot[blk_size*i:]
+                partition, nsnps_partition = utils._partition_bin_non_overlapping(blk_zscores, blk_annot, self.nbins)
+                matched_zscores.append(partition)
+                nsnps_blk[i] = nsnps_partition
+                # nmissing_blk = sum(1 for s in blk_zscores if s is None)
+                # nmissing += nmissing_blk
+
             self.log._log("Matched "+str(len(self.snplist) - nmissing)+" SNPs in phenotype "+self.name+\
                   ", out of "+str(len(self.snplist))+" SNPs ("+str(nmissing)+" missing)")
         
@@ -147,8 +146,6 @@ class Sumstats:
             total_zTz = np.dot(self.zscores_bin[i], self.zscores_bin[i])
             for j in range(self.nblks+1):
                 if (j < self.nblks):
-                    #blk_zscores = np.where(self.zscores_blk[j][i] == None, 0, self.zscores_blk[j][i])
-                    #blk_zTz = np.dot(blk_zscores, blk_zscores)
                     blk_zTz = np.dot(self.zscores_blk[j][i], self.zscores_blk[j][i])
                     self.rhs[j, i] = (total_zTz - blk_zTz)*self.nsamp/(self.nsnps_bin[i] - self.nsnps_blk[j][i])
                 else:
