@@ -1,0 +1,15 @@
+bmi
+basal_metabolic
+fvc
+height
+bp_systolic
+bp_diastolic
+overall_health
+igf1
+blood_wbc_count
+blood_lymphocyte
+creatinine
+fev1_fvc
+whr
+total_prot
+albumin
