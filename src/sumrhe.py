@@ -9,12 +9,13 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='SUM-RHE')
 parser.add_argument("--trace", default=None, type=str, \
-                    help='File path for trace summary statistics (.tr) and corresponding metadata (.MN)')
+                    help='File path for trace summary statistics (.tr) and corresponding metadata (.MN).'
+                     ' If the path is a directory, all trace summaires (ending with .tr) will be used by aggregating them.')
 # parser.add_argument("--rhe", default=None, type=str, \
 #                    help='Directory where the rhe trace outputs (from same population & SNP sets) are stored.'
 #                     ' Each output must have .trace and .MN files')
 parser.add_argument("--save-trace", default=None, type=str, \
-                    help='File path for saving trace summaries (.tr) and corresponding metadata (.MN)')
+                    help='File path for saving (aggregated) trace summaries (.tr) and corresponding metadata (.MN)')
 parser.add_argument("--pheno", default=None, type=str, \
                    help='File path for phenotype-specific summary statistics.'
                     ' If the path is a directory, all summary statistics (ending with .sumstat) will be used.')

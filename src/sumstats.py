@@ -116,14 +116,12 @@ class Sumstats:
             for i in range(self.nblks):
                 blk_size = len(self.snplist)//self.nblks
                 blk = self.snplist[blk_size*i: blk_size*(i+1)] if (i < self.nblks-1) else self.snplist[blk_size*i: ]
-                blk_zscores = np.array([zscore_dict.get(pid, .0) for pid in blk])
+                blk_zscores = np.array([zscore_dict.get(pid) for pid in blk])
                 
                 blk_annot = self.annot[blk_size*i:blk_size*(i+1)] if (i < self.nblks-1) else self.annot[blk_size*i:]
                 partition, nsnps_partition = utils._partition_bin_non_overlapping(blk_zscores, blk_annot, self.nbins)
                 matched_zscores.append(partition)
                 nsnps_blk[i] = nsnps_partition
-                # nmissing_blk = sum(1 for s in blk_zscores if s is None)
-                # nmissing += nmissing_blk
 
             self.log._log("Matched "+str(len(self.snplist) - nmissing)+" SNPs in phenotype "+self.name+\
                   ", out of "+str(len(self.snplist))+" SNPs ("+str(nmissing)+" missing)")

@@ -5,6 +5,15 @@ import re
 import time
 import datetime
 
+def _replace_None(li: list):
+    """
+    replace the None elements in the list with zero
+    """
+    for i, val in enumerate(li):
+        if val is None:
+            li[i] = .0
+    return li
+
 def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
     """
     Partition the first array (a 1D np array) by the annotation (a 1D array). return a nested list.
@@ -13,7 +22,8 @@ def _partition_bin_non_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, 
     partitions = {i: [] for i in range(nbins)}
     for z, idx in zip(jn_values, jn_annot):
         partitions[idx.argmax()].append(z)
-    return [partitions[i] for i in range(nbins)], [len(partitions[i]) for i in range(nbins)]
+    snp_cnts = [len(partitions[i]) - sum(1 for s in partitions[i] if s is None) for i in range(nbins)]
+    return [_replace_None(partitions[i]) for i in range(nbins)], snp_cnts
 
 
 def _partition_bin_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbins: int):
@@ -24,7 +34,8 @@ def _partition_bin_overlapping(jn_values: np.ndarray, jn_annot: np.ndarray, nbin
     partitions = {i: [] for i in range(nbins)}
     for bin in range(nbins):
         partitions[bin] = [jn_values[snp] for snp in range(len(jn_values)) if jn_annot[row, bin]]
-    return [partitions[i] for i in range(nbins)], [len(partitions[i]) for i in range(nbins)]
+    snp_cnts = [len(partitions[i]) - sum(1 for s in partitions[i] if s is None) for i in range(nbins)]
+    return [_replace_None(partitions[i]) for i in range(nbins)], snp_cnts
 
 def _calc_lsum(tr, n, m1, m2):
     '''
