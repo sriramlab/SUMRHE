@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 ```sumrhe``` can accurately (i.e., comparable to methods that use individual-level data) estimate heritability from summary-level data.
 To estimate (partitioned) heritability, you need the following: 
-1. LD scores (either genome-wide or fixed-window) from reference population **OR** trace summaries
+1. LD scores (either genome-wide or fixed-window) **OR** trace summaries calculated from in-sample or reference population genotype.
 2. GWAS summary statistics for the trait of interest
 
 Here is an example run command (```h2_ldscore.sh``` in the [example](example) directory):
@@ -67,8 +67,8 @@ python3 ../src/sumrhe.py --pheno ./sim_50k_h2_0.25_p_0.01.sumstat \
                   --verbose \
                   --njack 1000
 ```
-Running the script should result in a total heritability estimate ```h^2``` of 0.27439 and ```SE``` of 0.16206. Here, the partitioned genome-wide LD scores (```gw.ldscore.gz```) estimated using ```k=100``` random vectors and ```N=10,000``` reference sample have been used.
-Currently, to estimate partitioned heritability, the annotation file used for calculating the LD scores must also be provided separately (to be updated).
+Running the script should result in a total heritability estimate ```h^2``` of 0.27439 and ```SE``` of 0.01578. Here, the partitioned genome-wide LD scores (```gw.ldscore.gz```) estimated using ```k=100``` random vectors and ```N=10,000``` reference sample have been used.
+Currently, to estimate partitioned heritability, the "thin" annotation file used for calculating the LD scores must also be provided separately (to be updated).
 
 Similarly, you may estimate heritability using the trace summary statistics (.tr), which is mathematically equivalent to genome-wide sum of the LD scores (```h2_tr.sh``` in the [example](example) directory):
 ```
@@ -77,11 +77,10 @@ python3 ../src/sumrhe.py --pheno ./sim_50k_h2_0.25_p_0.01.sumstat \
                   --annot ./double_uniform_0.2.txt \
                   --verbose
 ```
-You should get an heritability estimate of 0.26851 and ```SE``` of 0.01512. Note, the ```SE``` estimate here is a lot smaller, as the trace summaries are estimated from the ```N=50,000``` in-sample genotype.
+You should get an heritability estimate of 0.26851 and ```SE``` of 0.01512. Note, the ```h^2``` estimates are different, as the trace summaries (```.tr```) are estimated from the ```N=50,000``` in-sample genotype, compared to the stochastic genome-wide LD scores, calculated from the ```N=10,000``` reference genotype. Still, both estimates overlap well within their error ranges.
 
-If you'd like to create your own trace summaries, please refer to the ```PyRHE``` program from our lab: https://github.com/sriramlab/PyRHE. You may also use the C++ version of ```RHE``` or ```GENIE```.
-
-You would need your own individual-level genotype for this (running with ```-tr``` option will save the trace summaries).
+If you'd like to create your own trace summaries, please refer to the ```PyRHE``` program from our lab: https://github.com/sriramlab/PyRHE. You may also use the C++ version of ```GENIE```.
+You would need your own individual-level genotype for this (running with ```-tr``` option will save the trace summaries). While less flexible than using SNP-level LD scores, the trace summaries are directly estimated with ```GENIE``` or ```pyRHE```, and the files are a lot smaller in size (less than 0.1 MB).
 
 ### 2. Estimating genome-wide LD scores
 
@@ -100,7 +99,8 @@ This script should run within a few seconds and create a gzip file named ```doub
 ## Parameters
 
 ```
---trace : File path for trace summary statistics (.tr) and corresponding metadata (.MN)
+--trace : File path for trace summary statistics (.tr) and corresponding metadata (.MN). If the path is a directory, all trace summaires (ending with .tr) will be used by aggregating them.
+--save-trace : File path for saving (aggregated) trace summaries (.tr) and corresponding metadata (.MN)
 --pheno : File path for phenotype-specific summary statistics (.sumstat). If the path is a directory, all summary statistics (ending with .sumstat) will be used.
 --bim : File path for the reference .bim file used for trace calculation (optional)
 --out : Output file path to save the analysis log and result (.log) or the genome-wide LD scores (.gw.ldscore.gz)
@@ -123,9 +123,9 @@ This script should run within a few seconds and create a gzip file named ```doub
 
 ✅ stochastic genome-wide LD scores
 
-☑️ easier input file formatting
+✅ better SE estimates with LD scores
 
-☑️ better SE estimates with LD scores
+☑️ easier input file formatting
 
 ☑️ both-side filtering of outlier SNPs
 
