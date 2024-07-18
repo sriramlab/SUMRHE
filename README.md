@@ -116,6 +116,7 @@ This script should run within a few seconds and create a gzip file named ```doub
 --nworkers : Number of workers for multiprocessing to calculate stochastic genome-wide LD scores. Default is 4.
 --nvecs : Number of random vectors to use for estimating stochastic genome-wide LD scores. Default is 10.
 --step_size : Number of SNPs to process in each step of estimating stochastic genome-wide LD scores. Default is 1000.
+--seed : Seed for estimating stochastic genome-wide LD scores. If not specified, the default numpy (pseudo) random number generator will be used.
 ```
 
 ## TODO's
@@ -125,7 +126,7 @@ This script should run within a few seconds and create a gzip file named ```doub
 
 ✅ better SE estimates with LD scores
 
-☑️ easier input file formatting
+✅ easier input file formatting
 
 ☑️ both-side filtering of outlier SNPs
 
