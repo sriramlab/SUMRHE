@@ -55,7 +55,9 @@ class Trace:
             self.annot = np.ones((self.nsnps, 1))
             self.log._log("Running with single component")
         else:
-            self.annot = np.loadtxt(annot_path)
+            self.annot_header, self.annot = utils._read_with_optional_header(annot_path)
+            if (self.annot_header is None):
+                self.annot_header = np.array(['L2_'+str(i) for i in range(self.annot.shape[1])])
             if (self.annot.ndim == 1):
                 self.annot = self.annot.reshape(-1, 1)
             self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))

@@ -13,7 +13,7 @@ import sys
 import gc
 
 class GenomewideLDScore:
-    def __init__(self, bed_path, annot_path, out_path, log, num_vecs=10, num_workers=4, step_size=1000):
+    def __init__(self, bed_path, annot_path, out_path, log, num_vecs=10, num_workers=4, step_size=1000, seed=None):
         self.G = open_bed(bed_path+".bed")
         self.nsamp, self.nsnps = self.G.shape
         self.nvecs = num_vecs
@@ -28,6 +28,7 @@ class GenomewideLDScore:
         if (annot_path is not None):
             self.log._log("With annotation file: "+str(annot_path))
         self._read_annot(annot_path)
+        self.root_seed = seed
 
     def _compute_Xz_blk(self, blk_idxs):
         """
@@ -35,10 +36,14 @@ class GenomewideLDScore:
         Read in the genotype blk altogether, then splice it afterwards (to make things faster).
         idx passed is the "blk" idx, i.e., always starts from 0.
         """
-        blk_start, blk_end, idxs = blk_idxs # j == blk idx, idxs == nested list of snp idx
+        j, blk_start, blk_end, idxs = blk_idxs # j == blk idx, idxs == nested list of snp idx
         nsnps = sum([len(binidx) for binidx in idxs])
         Xz = np.zeros((self.nbins, self.nsamp, self.nvecs))
-        Zs = np.random.normal(size=(nsnps, self.nvecs))
+        if (self.root_seed is None):
+            rng = np.random.default_rng()
+        else:
+            rng = np.random.default_rng([j, self.root_seed])
+        Zs = rng.standard_normal(size=(nsnps, self.nvecs))
 
         geno = self.G.read(index=np.s_[:, blk_start: blk_end])
         means = np.nanmean(geno, axis=0)
@@ -129,7 +134,7 @@ class GenomewideLDScore:
         """
         self.start_time = utils._get_time()
         self.log._log("Genome-wide LD score calculation started at: "+utils._get_timestr(self.start_time))
-        self.log._log(f"num_vecs: {self.nvecs}, num_workers: {self.nworkers}, step_size: {self.step_size}")
+        self.log._log(f"num_vecs: {self.nvecs}, num_workers: {self.nworkers}, step_size: {self.step_size}, seed: {self.root_seed}")
 
         self.nblks = len(np.arange(self.nsnps)[::self.step_size])
         Xz_input = []
@@ -138,7 +143,7 @@ class GenomewideLDScore:
             idx_start = self.step_size*j
             idx_end = self.nsnps if j==self.nblks-1 else self.step_size*(j+1)
             annot_blk = self.annot[idx_start:idx_end]
-            Xz_input.append((idx_start, idx_end, self._partition_index(np.arange(len(annot_blk)), annot_blk)))
+            Xz_input.append((j, idx_start, idx_end, self._partition_index(np.arange(len(annot_blk)), annot_blk)))
             XtXz_input.append((idx_start, idx_end))
         
         self.Xz = np.zeros((self.nbins, self.nsamp, self.nvecs))

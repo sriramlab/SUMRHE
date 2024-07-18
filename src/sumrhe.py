@@ -50,6 +50,8 @@ parser.add_argument("--nvecs", default=10, type=int, \
                     help='Number of random vectors to use for estimating stochastic genome-wide LD scores. Default is 10.')
 parser.add_argument("--step_size", default=1000, type=int, \
                     help='Number of SNPs to process in each step of estimating stochastic genome-wide LD scores. Default is 1000.')
+parser.add_argument("--seed", default=None, type=int, \
+                    help='Seed for estimating stochastic genome-wide LD scores. If not specified, the default numpy (pseudo) random number generator will be used.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -77,7 +79,7 @@ if __name__ == '__main__':
         if (args.out is None):
             log._log("!!! An output path to save the genome-wide LD scores must be provided !!!")
             sys.exit(1)
-        gwld = GenomewideLDScore(args.geno, args.annot, args.out, log, args.nvecs, args.nworkers, args.step_size)
+        gwld = GenomewideLDScore(args.geno, args.annot, args.out, log, args.nvecs, args.nworkers, args.step_size, args.seed)
         gwld._compute_ldscore()
     else:
         if (args.trace is None) and (args.ldscores is None):

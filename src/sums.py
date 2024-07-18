@@ -82,6 +82,8 @@ class Sumrhe:
         ''' run snp-level block jackknife '''
         self.hsums[idx, :, 0] = self.herits[idx, self.nblks] # h2 from all snps
         self.hsums[idx, :, 1] = np.sqrt(np.sum(np.square(self.herits[idx, :-1, :] - self.hsums[idx, :, 0].T), axis=0)*(self.nblks-1)/self.nblks) # jackknife SE
+        if (self.verbose):
+            self.log._log("Solution & jackknife SE:\n"+np.array2string(self.hsums, precision=5, separator=', '))
 
     def _run(self):
         for i in range(self.npheno):
