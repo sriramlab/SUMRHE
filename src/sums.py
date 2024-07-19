@@ -17,6 +17,7 @@ class Sumrhe:
         self.snplist = self.tr.snplist
         self.nblks = self.tr.nblks
         self.annot = self.tr.annot
+        self.annot_header = self.tr.annot_header
         self.nbins = self.tr.nbins
         if (allsnp):
             self.sums = Sumstats(nblks=self.nblks, chisq_threshold=chisq_threshold, log=self.log, annot=self.annot, nbins=self.nbins)
@@ -100,6 +101,11 @@ class Sumrhe:
     
     def _logoff(self):
         for i in range(self.npheno):
+            if (self.nbins > 1):
+                for j in range(self.nbins):
+                    h2 = self.hsums[i, j, 0]
+                    se = self.hsums[i, j, 1]
+                    self.log._log(f"^^^ Phenotype {i} Estimated partitioned heritability bin {self.annot_header[j]} (h^2_{j}): {h2:.5f} SE: {se:.5f}")
             h2 = self.hsums[i, -1][0]
             se = self.hsums[i, -1][1]
             self.log._log("^^^ Phenotype "+str(i)+" Estimated total heritability (h^2): "+format(h2, '.5f')+" SE: "+format(se, '.5f'))
