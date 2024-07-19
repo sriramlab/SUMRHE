@@ -13,7 +13,7 @@ You may set up ```sumrhe``` using Conda (Anaconda3 or Miniconda) or virtual envi
 1. Clone the repository
 ```bash
 git clone https://github.com/bronsonj98/SUMRHE.git
-cd sumrhe
+cd SUMRHE
 ```
 
 2. Create the conda environment
@@ -30,7 +30,7 @@ conda activate sumrhe
 1. Clone the repository
 ```bash
 git clone https://github.com/bronsonj98/SUMRHE.git
-cd sumrhe
+cd SUMRHE
 ```
 
 2. Create a virtual environment
