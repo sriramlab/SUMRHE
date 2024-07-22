@@ -89,6 +89,7 @@ class GenomewideLDScore:
         If not, then have dummy names and read in the annotation.
         """
         if (annot_path is None):
+            self.l2cols = None
             self.annot = np.ones((self.nsnps, 1))
             self.log._log("Calculating genome-wide (non-partitioned) LD score")
         else:

@@ -25,7 +25,7 @@ class Sumstats:
         else:
             self.nsnps_trace = len(snplist)
         self.snpids = []
-        self.annot = annot # TODO: convert the annot by matching with SNP IDs ("annot" passed through the arg is for trace SNPs)
+        self.annot = annot
         self.zscores = []
         self.zscores_bin = [] # list of list, where zscores are partitioned by bin assignment
         self.zscores_blk = [] # list of list of list, where zscores are partitioned by blk & bin assignment

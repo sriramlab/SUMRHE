@@ -52,6 +52,12 @@ parser.add_argument("--step_size", default=1000, type=int, \
                     help='Number of SNPs to process in each step of estimating stochastic genome-wide LD scores. Default is 1000.')
 parser.add_argument("--seed", default=None, type=int, \
                     help='Seed for estimating stochastic genome-wide LD scores. If not specified, the default numpy (pseudo) random number generator will be used.')
+parser.add_argument("--h2", default=None, type=str, \
+                   help='File path for phenotype-specific summary statistics (.sumstat[.gz]) to estimate heritability.'
+                    ' If the path is a directory, all summary statistics (ending with .sumstat[.gz]) will be used.')
+parser.add_argument("--rg", default=None, type=str, \
+                   help='Comma-separated file path for a pair of phenotype-specific summary statistics (.sumstat[.gz]) to estimate genetic correlation (rg).')
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
