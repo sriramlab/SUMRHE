@@ -133,5 +133,9 @@ This script should run within a few seconds and create a gzip file named ```doub
 ☑️ genetic correlation
 
 ## References
-You may refer to the following bioRxiv preprint for more details on how SUM-RHE works & benchmark results:
-https://www.biorxiv.org/content/10.1101/2024.03.09.584258v1.full
+```SUM-RHE``` is now published on Genome Research as an open access article. For references, please cite
+```
+Jeong, M., Pazokitoroudi, A., Liu, Z., & Sankararaman, S. (2024). Scalable summary statistics-based heritability estimation method with individual genotype level accuracy. Genome research, gr.279207.124. Advance online publication. https://doi.org/10.1101/gr.279207.124
+```
+
+
