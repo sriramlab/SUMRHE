@@ -52,14 +52,15 @@ class Trace:
     
     def _read_annot(self, annot_path):
         if (annot_path is None):
+            self.annot_header = np.array(['L2'])
             self.annot = np.ones((self.nsnps, 1))
             self.log._log("Running with single component")
         else:
             self.annot_header, self.annot = utils._read_with_optional_header(annot_path)
-            if (self.annot_header is None):
-                self.annot_header = np.array(['L2_'+str(i) for i in range(self.annot.shape[1])])
             if (self.annot.ndim == 1):
                 self.annot = self.annot.reshape(-1, 1)
+            if (self.annot_header is None):
+                self.annot_header = np.array(['L2_'+str(i) for i in range(self.annot.shape[1])])
             self.log._log("Read SNP partition annotation of dimensions "+str(self.annot.shape))
         if (self.nbins != self.annot.shape[1]) or (self.nsnps != self.annot.shape[0]):
             self.log._log("!!! number of components in annotation does not match the input trace summary !!!")
@@ -234,7 +235,8 @@ class Trace:
         Read the LD score matrix (X^T Xz) instead of trace summaries. Works with either the (truncated) LDSC LD scores (.l2.ldscore.gz) or
         the genome-wide LD scores (.gw.ldscore.gz)
         '''
-        self.ldscores_df = pd.read_csv(self.ldscorespath, compression='gzip', sep='\t', index_col=False)
+        #self.ldscores_df = pd.read_csv(self.ldscorespath, compression='gzip', sep='\t', index_col=False)
+        self.ldscores_df = pd.read_csv(self.ldscorespath, compression='gzip', delim_whitespace=True, index_col=False)
         self.ldscores = self.ldscores_df.iloc[:, 3:].to_numpy()
         self.snplist = self.ldscores_df['SNP'].to_numpy()
         self.nsnps = self.ldscores.shape[0]

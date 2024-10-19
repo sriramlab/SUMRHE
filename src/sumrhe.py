@@ -89,7 +89,7 @@ if __name__ == '__main__':
         gwld._compute_ldscore()
     else:
         if (args.trace is None) and (args.ldscores is None):
-            log._log("!!! Either trace sumamry or LD score (truncated or genome-wide) must be provided !!!")
+            log._log("!!! Either trace summary or LD score (truncated or genome-wide) must be provided !!!")
             sys.exit(1)
         # if (args.save_trace is not None) and ((args.rhe is None) and (args.ldscores is None)):
         #     # TODO: allow combining the trace summaries with rhe traceoutputs
