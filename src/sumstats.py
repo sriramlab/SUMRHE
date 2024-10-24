@@ -7,6 +7,7 @@ Format should be:
 import utils
 
 import numpy as np
+import pandas as pd
 from os import listdir
 
 class Sumstats:
@@ -64,26 +65,33 @@ class Sumstats:
         
     def _read_sumstats(self, path, name):
         ''' Read in summary statistics for a single phenotype '''
-        snpid = []
-        Nmiss = []
-        zscores = []
+        # snpid = []
+        # Nmiss = []
+        # zscores = []
         self.name = name
-        if (self.snplist is None):
-            with open(path, 'r') as fd:
-                next(fd)
-                for line in fd:
-                    val = line.split()
-                    Nmiss.append(float(val[3]))
-                    zscores.append(float(val[4]))
-        else:
-            with open(path, 'r') as fd:
-                next(fd)
-                for line in fd:
-                    val = line.split()
-                    snpid.append(str(val[0]))
-                    Nmiss.append(float(val[3]))
-                    zscores.append(float(val[4]))
-            self.snpids = snpid
+        # if (self.snplist is None):
+        #     with open(path, 'r') as fd:
+        #         next(fd)
+        #         for line in fd:
+        #             val = line.split()
+        #             Nmiss.append(float(val[3]))
+        #             zscores.append(float(val[4]))
+        # else:
+        #     with open(path, 'r') as fd:
+        #         next(fd)
+        #         for line in fd:
+        #             val = line.split()
+        #             snpid.append(str(val[0]))
+        #             Nmiss.append(float(val[3]))
+        #             zscores.append(float(val[4]))
+        #     self.snpids = snpid
+        
+        # TODO: implement snplist matching with dataframe instead
+        sumdf = pd.read_csv(path, sep='\s+')
+        Nmiss = utils._parse_column(sumdf, ['N', 'n'], 3)
+        zscores = utils._parse_column(sumdf, ['Z', 'z'], 3)
+        self.snpids = utils._parse_column(sumdf, ['ID', 'id', 'snp', 'SNP'], 0)
+
         nsamp = max(Nmiss)
         zscores = np.array(zscores)*np.sqrt(np.array(Nmiss)/nsamp)
         self.zscores = zscores

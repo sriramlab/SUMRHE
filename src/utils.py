@@ -111,3 +111,15 @@ def _get_timestr(current_time):
     timestr = str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)))+" "+str(timezone)
     return timestr
     
+def _parse_column(df, letters, min_index=3):
+    '''
+    select the column of a dataframe including certain letter & after certain column index
+    '''
+    matching_columns = [col for col in df.columns[min_index:] if any(letter in col for letter in letters)]
+    
+    if len(matching_columns) == 0:
+        raise ValueError(f"No column containing any of the letters {letters} found starting from column {min_index}.")
+    elif len(matching_columns) > 1:
+        raise ValueError(f"Multiple columns containing the letters {letters} found: {matching_columns}. Expected only one.")
+    else:
+        return df[matching_columns[0]].values
