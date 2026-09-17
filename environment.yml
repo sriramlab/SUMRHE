@@ -1,0 +1,13 @@
+name: sumrhe
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python>=3.9
+  - numpy>=1.19.0
+  - pandas>=1.5
+  - scipy>=1.9
+  - tqdm>=4.64
+  - pip
+  - pip:
+    - bed-reader>=1.0
